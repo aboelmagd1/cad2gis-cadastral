@@ -1,0 +1,62 @@
+{
+  "demoName": "Synthetic_Cadastral_Block",
+  "crsEpsg": 32637,
+  "mainParcels": [
+    {
+      "plotId": "101",
+      "width": 20.0,
+      "length": 30.0,
+      "originX": 500000.0,
+      "originY": 2400000.0,
+      "usage": "RSD",
+      "remarks": "سكني"
+    },
+    {
+      "plotId": "102",
+      "width": 20.0,
+      "length": 30.0,
+      "originX": 500020.0,
+      "originY": 2400000.0,
+      "usage": "COM",
+      "remarks": "تجاري أحياء"
+    }
+  ],
+  "subParcels": [
+    {
+      "subType": "GARDEN",
+      "width": 40.0,
+      "length": 10.0,
+      "originX": 500000.0,
+      "originY": 2400030.0,
+      "usage": "PAK",
+      "remarks": "حديقة"
+    },
+    {
+      "subType": "CORRIDOR",
+      "width": 6.0,
+      "length": 30.0,
+      "originX": 499994.0,
+      "originY": 2400000.0,
+      "usage": "SRV",
+      "remarks": "خدمات"
+    }
+  ],
+  "facingEdges": [
+    {
+      "description": "Facing block across 12m street",
+      "startX": 500000.0,
+      "startY": 2399988.0,
+      "endX": 500040.0,
+      "endY": 2399988.0,
+      "expectedWidth": 12.0
+    },
+    {
+      "description": "Facing boundary across 6m corridor",
+      "startX": 499988.0,
+      "startY": 2400000.0,
+      "endX": 499988.0,
+      "endY": 2400030.0,
+      "expectedWidth": 6.0
+    }
+  ]
+}

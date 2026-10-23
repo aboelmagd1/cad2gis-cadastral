@@ -1,0 +1,73 @@
+using System.Collections.Generic;
+
+namespace Cad2Gis.Core.Models;
+
+public enum ParcelClass
+{
+    Main,
+    Sub,
+    Divided,
+    PublicService,
+    Park,
+    Mosque,
+    Utility
+}
+
+public class ParcelRecord
+{
+    public long InternalId { get; set; }
+    public ParcelClass Class { get; set; } = ParcelClass.Main;
+
+    /// <summary>
+    /// Temporary text field tag (MAIN / SUB) on the working dataset only.
+    /// Dropped at final export to strictly match template schemas.
+    /// </summary>
+    public string TemporaryParcelClass => Class == ParcelClass.Sub ? "SUB" : "MAIN";
+
+    /// <summary>
+    /// Official PARCEL_TYP field: 1 = MAIN (القطع الرئيسية), 2 = SUB (المرافق والخدمات).
+    /// </summary>
+    public short ParcelTyp => (short)(Class == ParcelClass.Sub ? 2 : 1);
+
+    /// <summary>
+    /// Optional sub-parcel classification type (e.g. GARDEN, CORRIDOR, UTILITY)
+    /// </summary>
+    public string? SubType { get; set; }
+
+    // MOMRAH / Balady Mandatory Attributes (matching templates/PARCEL.shp)
+    public int RealestateType { get; set; } = 2;              // REALESTA_1 (2 = أرض فضاء)
+    public string Neighbourhood { get; set; } = string.Empty; // NEIGHBOURH
+    public string RegionId { get; set; } = string.Empty;      // REGION_ID (No silent default)
+    public string CityId { get; set; } = string.Empty;        // CITY_ID (No silent default)
+    public string Address { get; set; } = string.Empty;       // ADDRESS
+    public string Usage { get; set; } = string.Empty;         // USAGE (No silent default)
+    public int IsBuilding { get; set; } = 0;                  // ISBUILDING (0 = لا, 1 = نعم)
+    public int BuildingType { get; set; } = 1;                // BUILDINGTY (1 = مسلح حديث)
+    public string Remarks { get; set; } = string.Empty;       // REMARKS (No silent default)
+    public string? Layout { get; set; }                       // LAYOUT
+    public string PlotId { get; set; } = string.Empty;        // PLOT_ID (Unique Parcel ID, e.g. "101")
+    public string? BlockNo { get; set; }                      // BLOCK_NO (Block identifier, e.g. "1")
+    public string PlanNo { get; set; } = string.Empty;        // PLAN_NO
+    public string PlotNo1 { get; set; } = string.Empty;       // PLOT_NO1
+    public string? PlotNo2 { get; set; }                      // PLOT_NO2
+    public string? PlotNo3 { get; set; }                      // PLOT_NO3
+    public string? PlotNo4 { get; set; }                      // PLOT_NO4
+    public string? PlotNo5 { get; set; }                      // PLOT_NO5
+    public string? PlotNo6 { get; set; }                      // PLOT_NO6
+    public string RequestType { get; set; } = string.Empty;   // REQUEST_TY (No silent default)
+    public string RequestNo { get; set; } = string.Empty;     // REQUEST_NO
+    public string ReportNo { get; set; } = string.Empty;      // REPORT_NO
+
+    // Frozen Planar UTM Metric Values
+    public double AreaSqm { get; set; }                       // AREA_SQM
+    public double ShapeArea { get; set; }                     // Shape_Area
+    public double ShapeLength { get; set; }                   // Shape_Leng
+
+    public double CentroidX { get; set; }
+    public double CentroidY { get; set; }
+
+    // Associated 4-cardinal borders (Only for MAIN parcels)
+    public List<BorderRecord> Borders { get; set; } = new();
+
+    public override string ToString() => $"Parcel {PlotId} [{TemporaryParcelClass}] (Plan: {PlanNo}, Usage: {Usage}, Area: {AreaSqm:F2} m²)";
+}

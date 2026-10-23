@@ -1,0 +1,52 @@
+<ArcGIS defaultAssembly="Cad2Gis.AddIn.dll" defaultNamespace="Cad2Gis.AddIn" xmlns="http://schemas.esri.com/DADF/Registry" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <AddInInfo id="{907b00a7-4503-4bff-9969-268e429817bd}" version="3.3.0" desktopVersion="3.0">
+    <Name>CAD2GIS</Name>
+    <Description>Cadastral ETL Add-in for ArcGIS Pro 3.3.0 (MOMRAH / Balady Compliance)</Description>
+    <Image>Images\MainIcon_32.png</Image>
+    <Author>CAD2GIS Team</Author>
+    <Company>Saudi Municipal GIS</Company>
+    <Date>10/18/2026</Date>
+    <Subject>Cadastral, Transformation, MOMRAH</Subject>
+  </AddInInfo>
+
+  <modules>
+    <insertModule id="Cad2Gis_Module" className="Cad2GisModule" autoLoad="true">
+      <tabs>
+        <tab id="Cad2Gis_Tab" caption="CAD2GIS">
+          <group refID="Cad2Gis_Group_Workspace" />
+          <group refID="Cad2Gis_Group_Steps" />
+          <group refID="Cad2Gis_Group_Pipeline" />
+        </tab>
+      </tabs>
+      <groups>
+        <group id="Cad2Gis_Group_Workspace" caption="Workspace">
+          <button refID="Cad2Gis_Btn_ShowDockpane" size="large" />
+        </group>
+        <group id="Cad2Gis_Group_Steps" caption="Pipeline Steps">
+          <button refID="Cad2Gis_Btn_Step1" size="middle" />
+          <button refID="Cad2Gis_Btn_Step2" size="middle" />
+          <button refID="Cad2Gis_Btn_Step3" size="middle" />
+          <button refID="Cad2Gis_Btn_Step4" size="middle" />
+          <button refID="Cad2Gis_Btn_Step5" size="middle" />
+        </group>
+        <group id="Cad2Gis_Group_Pipeline" caption="Execution">
+          <button refID="Cad2Gis_Btn_RunAll" size="large" />
+        </group>
+      </groups>
+      <controls>
+        <button id="Cad2Gis_Btn_ShowDockpane" caption="Show Tool Panel" className="Cad2Gis.AddIn.DockPane.ShowCad2GisDockpaneButton" loadOnClick="true" smallImage="Images\MainIcon_16.png" largeImage="Images\MainIcon_32.png" />
+        <button id="Cad2Gis_Btn_Step1" caption="1. CAD &amp; Spatial" className="Cad2Gis.AddIn.DockPane.ExecuteStep1Button" loadOnClick="true" smallImage="Images\Step1_16.png" largeImage="Images\Step1_32.png" />
+        <button id="Cad2Gis_Btn_Step2" caption="2. Extract Parcels" className="Cad2Gis.AddIn.DockPane.ExecuteStep2Button" loadOnClick="true" smallImage="Images\Step2_16.png" largeImage="Images\Step2_32.png" />
+        <button id="Cad2Gis_Btn_Step3" caption="3. Populate Schema" className="Cad2Gis.AddIn.DockPane.ExecuteStep3Button" loadOnClick="true" smallImage="Images\Step3_16.png" largeImage="Images\Step3_32.png" />
+        <button id="Cad2Gis_Btn_Step4" caption="4. Build Borders" className="Cad2Gis.AddIn.DockPane.ExecuteStep4Button" loadOnClick="true" smallImage="Images\Step4_16.png" largeImage="Images\Step4_32.png" />
+        <button id="Cad2Gis_Btn_Step5" caption="5. Export &amp; QA" className="Cad2Gis.AddIn.DockPane.ExecuteStep5Button" loadOnClick="true" smallImage="Images\Step5_16.png" largeImage="Images\Step5_32.png" />
+        <button id="Cad2Gis_Btn_RunAll" caption="Run All (Pipeline)" className="Cad2Gis.AddIn.DockPane.ExecuteAllPipelineButton" loadOnClick="true" smallImage="Images\RunAll_16.png" largeImage="Images\RunAll_32.png" />
+      </controls>
+      <dockPanes>
+        <dockPane id="Cad2Gis_Dockpane" caption="CAD2GIS - Cadastral Transformation" className="Cad2Gis.AddIn.DockPane.Cad2GisDockpaneViewModel" dock="right">
+          <content className="Cad2Gis.AddIn.DockPane.Cad2GisDockpaneView" />
+        </dockPane>
+      </dockPanes>
+    </insertModule>
+  </modules>
+</ArcGIS>

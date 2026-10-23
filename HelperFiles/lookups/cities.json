@@ -1,0 +1,821 @@
+{
+  "1": {
+    "cityName": "الرياض",
+    "regionId": "1",
+    "regionName": "الرياض"
+  },
+  "2": {
+    "cityName": "جدة",
+    "regionId": "2",
+    "regionName": "مكة المكرمة"
+  },
+  "3": {
+    "cityName": "مكة المكرمة",
+    "regionId": "2",
+    "regionName": "مكة المكرمة"
+  },
+  "4": {
+    "cityName": "الطائف",
+    "regionId": "2",
+    "regionName": "مكة المكرمة"
+  },
+  "5": {
+    "cityName": "المدينة المنورة",
+    "regionId": "3",
+    "regionName": "المدينة المنورة"
+  },
+  "6": {
+    "cityName": "تبوك",
+    "regionId": "7",
+    "regionName": "تبوك"
+  },
+  "7": {
+    "cityName": "الدمام",
+    "regionId": "5",
+    "regionName": "المنطقة الشرقية"
+  },
+  "8": {
+    "cityName": "الخبر",
+    "regionId": "5",
+    "regionName": "المنطقة الشرقية"
+  },
+  "9": {
+    "cityName": "الهفوف بمحافظة الاحساء",
+    "regionId": "5",
+    "regionName": "المنطقة الشرقية"
+  },
+  "10": {
+    "cityName": "بريدة",
+    "regionId": "4",
+    "regionName": "القصيم"
+  },
+  "11": {
+    "cityName": "حائل",
+    "regionId": "8",
+    "regionName": "حائل"
+  },
+  "12": {
+    "cityName": "عرعر",
+    "regionId": "9",
+    "regionName": "الحدود الشمالية"
+  },
+  "13": {
+    "cityName": "أبها",
+    "regionId": "6",
+    "regionName": "عسير"
+  },
+  "14": {
+    "cityName": "جازان",
+    "regionId": "10",
+    "regionName": "جازان"
+  },
+  "15": {
+    "cityName": "نجران",
+    "regionId": "11",
+    "regionName": "نجران"
+  },
+  "16": {
+    "cityName": "الباحة",
+    "regionId": "12",
+    "regionName": "الباحة"
+  },
+  "17": {
+    "cityName": "سكاكا",
+    "regionId": "13",
+    "regionName": "الجوف"
+  },
+  "18": {
+    "cityName": "عفيف",
+    "regionId": "1",
+    "regionName": "الرياض"
+  },
+  "19": {
+    "cityName": "المجمعة",
+    "regionId": "1",
+    "regionName": "الرياض"
+  },
+  "20": {
+    "cityName": "الزلفي",
+    "regionId": "1",
+    "regionName": "الرياض"
+  },
+  "21": {
+    "cityName": "ينبع",
+    "regionId": "3",
+    "regionName": "المدينة المنورة"
+  },
+  "22": {
+    "cityName": "ثادق",
+    "regionId": "1",
+    "regionName": "الرياض"
+  },
+  "23": {
+    "cityName": "حوطة بني تميم",
+    "regionId": "1",
+    "regionName": "الرياض"
+  },
+  "24": {
+    "cityName": "الخرج",
+    "regionId": "1",
+    "regionName": "الرياض"
+  },
+  "25": {
+    "cityName": "الأفلاج",
+    "regionId": "1",
+    "regionName": "الرياض"
+  },
+  "26": {
+    "cityName": "وادي الدواسر",
+    "regionId": "1",
+    "regionName": "الرياض"
+  },
+  "27": {
+    "cityName": "القطيف",
+    "regionId": "5",
+    "regionName": "الشرقية"
+  },
+  "28": {
+    "cityName": "الجبيل",
+    "regionId": "5",
+    "regionName": "الشرقية"
+  },
+  "29": {
+    "cityName": "قرية",
+    "regionId": "5",
+    "regionName": "الشرقية"
+  },
+  "30": {
+    "cityName": "حفر الباطن",
+    "regionId": "5",
+    "regionName": "الشرقية"
+  },
+  "31": {
+    "cityName": "الخفجي",
+    "regionId": "5",
+    "regionName": "الشرقية"
+  },
+  "32": {
+    "cityName": "طريف",
+    "regionId": "9",
+    "regionName": "الحدود الشمالية"
+  },
+  "33": {
+    "cityName": "رفحاء",
+    "regionId": "9",
+    "regionName": "الحدود الشمالية"
+  },
+  "34": {
+    "cityName": "تيماء",
+    "regionId": "7",
+    "regionName": "تبوك"
+  },
+  "35": {
+    "cityName": "ضباء",
+    "regionId": "7",
+    "regionName": "تبوك"
+  },
+  "36": {
+    "cityName": "الوجه",
+    "regionId": "7",
+    "regionName": "تبوك"
+  },
+  "37": {
+    "cityName": "أملج",
+    "regionId": "7",
+    "regionName": "تبوك"
+  },
+  "38": {
+    "cityName": "سكاكا",
+    "regionId": "13",
+    "regionName": "الجوف"
+  },
+  "39": {
+    "cityName": "دومة الجندل",
+    "regionId": "13",
+    "regionName": "الجوف"
+  },
+  "40": {
+    "cityName": "طبرجل",
+    "regionId": "13",
+    "regionName": "الجوف"
+  },
+  "41": {
+    "cityName": "القريات",
+    "regionId": "13",
+    "regionName": "الجوف"
+  },
+  "42": {
+    "cityName": "حقل",
+    "regionId": "7",
+    "regionName": "تبوك"
+  },
+  "43": {
+    "cityName": "عنيزة",
+    "regionId": "4",
+    "regionName": "القصيم"
+  },
+  "44": {
+    "cityName": "الرس",
+    "regionId": "4",
+    "regionName": "القصيم"
+  },
+  "45": {
+    "cityName": "البكيرية",
+    "regionId": "4",
+    "regionName": "القصيم"
+  },
+  "46": {
+    "cityName": "ينبع",
+    "regionId": "3",
+    "regionName": "المدينة المنورة"
+  },
+  "47": {
+    "cityName": "المهد",
+    "regionId": "3",
+    "regionName": "المدينة المنورة"
+  },
+  "48": {
+    "cityName": "العلا",
+    "regionId": "3",
+    "regionName": "المدينة المنورة"
+  },
+  "49": {
+    "cityName": "خيبر",
+    "regionId": "3",
+    "regionName": "المدينة المنورة"
+  },
+  "50": {
+    "cityName": "رابغ",
+    "regionId": "2",
+    "regionName": "مكة المكرمة"
+  },
+  "51": {
+    "cityName": "الليث",
+    "regionId": "2",
+    "regionName": "مكة المكرمة"
+  },
+  "52": {
+    "cityName": "القنفذة",
+    "regionId": "2",
+    "regionName": "مكة المكرمة"
+  },
+  "53": {
+    "cityName": "الخرمة",
+    "regionId": "2",
+    "regionName": "مكة المكرمة"
+  },
+  "54": {
+    "cityName": "بكرا",
+    "regionId": "1"
+  },
+  "55": {
+    "cityName": "خميس مشيط",
+    "regionId": "6",
+    "regionName": "عسير"
+  },
+  "56": {
+    "cityName": "ظهران الجنوب",
+    "regionId": "6",
+    "regionName": "عسير"
+  },
+  "57": {
+    "cityName": "النماص",
+    "regionId": "6",
+    "regionName": "عسير"
+  },
+  "58": {
+    "cityName": "رجال ألمع",
+    "regionId": "6",
+    "regionName": "عسير"
+  },
+  "59": {
+    "cityName": "بيشة",
+    "regionId": "6",
+    "regionName": "عسير"
+  },
+  "60": {
+    "cityName": "محايل عسير",
+    "regionId": "6",
+    "regionName": "عسير"
+  },
+  "61": {
+    "cityName": "الباحة",
+    "regionId": "12",
+    "regionName": "الباحة"
+  },
+  "62": {
+    "cityName": "قلوة",
+    "regionId": "12",
+    "regionName": "الباحة"
+  },
+  "63": {
+    "cityName": "المندق",
+    "regionId": "12",
+    "regionName": "الباحة"
+  },
+  "64": {
+    "cityName": "نجران",
+    "regionId": "11",
+    "regionName": "نجران"
+  },
+  "65": {
+    "cityName": "صامطة",
+    "regionId": "10",
+    "regionName": "جازان"
+  },
+  "66": {
+    "cityName": "صبيا",
+    "regionId": "10",
+    "regionName": "جازان"
+  },
+  "67": {
+    "cityName": "أبوعريش",
+    "regionId": "1"
+  },
+  "68": {
+    "cityName": "فرسان",
+    "regionId": "10",
+    "regionName": "جازان"
+  },
+  "69": {
+    "cityName": "بلقرن",
+    "regionId": "6",
+    "regionName": "عسير"
+  },
+  "70": {
+    "cityName": "بلجرشي",
+    "regionId": "12",
+    "regionName": "الباحة"
+  },
+  "75": {
+    "cityName": "السليل",
+    "regionId": "1",
+    "regionName": "الرياض"
+  },
+  "77": {
+    "cityName": "تثليث",
+    "regionId": "6",
+    "regionName": "عسير"
+  },
+  "78": {
+    "cityName": "سراة عبيدة",
+    "regionId": "6",
+    "regionName": "عسير"
+  },
+  "79": {
+    "cityName": "سرورة",
+    "regionId": "1"
+  },
+  "80": {
+    "cityName": "المذنب",
+    "regionId": "4",
+    "regionName": "القصيم"
+  },
+  "81": {
+    "cityName": "بقعاء",
+    "regionId": "8",
+    "regionName": "حائل"
+  },
+  "82": {
+    "cityName": "رنية",
+    "regionId": "2",
+    "regionName": "مكة المكرمة"
+  },
+  "83": {
+    "cityName": "تربة",
+    "regionId": "2",
+    "regionName": "مكة المكرمة"
+  },
+  "84": {
+    "cityName": "النعابية",
+    "regionId": "1"
+  },
+  "85": {
+    "cityName": "رأس تنورة",
+    "regionId": "5",
+    "regionName": "الشرقية"
+  },
+  "86": {
+    "cityName": "بقيق",
+    "regionId": "5",
+    "regionName": "الشرقية"
+  },
+  "87": {
+    "cityName": "الظهران",
+    "regionId": "1"
+  },
+  "89": {
+    "cityName": "المخواة",
+    "regionId": "12",
+    "regionName": "الباحة"
+  },
+  "91": {
+    "cityName": "الغاط",
+    "regionId": "1",
+    "regionName": "الرياض"
+  },
+  "92": {
+    "cityName": "حوطة سدير",
+    "regionId": "1"
+  },
+  "93": {
+    "cityName": "البدائع",
+    "regionId": "4",
+    "regionName": "القصيم"
+  },
+  "94": {
+    "cityName": "الدرب",
+    "regionId": "10",
+    "regionName": "جازان"
+  },
+  "95": {
+    "cityName": "عقلة الصقور",
+    "regionId": "4",
+    "regionName": "القصيم"
+  },
+  "96": {
+    "cityName": "المزاحمية",
+    "regionId": "1",
+    "regionName": "الرياض"
+  },
+  "97": {
+    "cityName": "طريف الأسياح",
+    "regionId": "4",
+    "regionName": "القصيم"
+  },
+  "98": {
+    "cityName": "الحناكية",
+    "regionId": "3",
+    "regionName": "المدينة المنورة"
+  },
+  "100": {
+    "cityName": "الخبراء",
+    "regionId": "4",
+    "regionName": "القصيم"
+  },
+  "109": {
+    "cityName": "الموسم",
+    "regionId": "10",
+    "regionName": "جازان"
+  },
+  "110": {
+    "cityName": "عيون الجواء",
+    "regionId": "4",
+    "regionName": "القصيم"
+  },
+  "114": {
+    "cityName": "صفوى",
+    "regionId": "1"
+  },
+  "116": {
+    "cityName": "البدع",
+    "regionId": "7",
+    "regionName": "تبوك"
+  },
+  "117": {
+    "cityName": "بدر",
+    "regionId": "3",
+    "regionName": "المدينة المنورة"
+  },
+  "118": {
+    "cityName": "ذهبان",
+    "regionId": "1"
+  },
+  "119": {
+    "cityName": "جبة",
+    "regionId": "1"
+  },
+  "120": {
+    "cityName": "القرى",
+    "regionId": "12",
+    "regionName": "الباحة"
+  },
+  "121": {
+    "cityName": "رماح",
+    "regionId": "1",
+    "regionName": "الرياض"
+  },
+  "122": {
+    "cityName": "الصويدرة",
+    "regionId": "1"
+  },
+  "123": {
+    "cityName": "الدرعية",
+    "regionId": "1",
+    "regionName": "الرياض"
+  },
+  "124": {
+    "cityName": "رضية",
+    "regionId": "1"
+  },
+  "125": {
+    "cityName": "المويه",
+    "regionId": "2",
+    "regionName": "مكة المكرمة"
+  },
+  "126": {
+    "cityName": "قصيباء",
+    "regionId": "1"
+  },
+  "127": {
+    "cityName": "العويقيلة",
+    "regionId": "9",
+    "regionName": "الحدود الشمالية"
+  },
+  "128": {
+    "cityName": "تمب",
+    "regionId": "1"
+  },
+  "129": {
+    "cityName": "الجموم",
+    "regionId": "2",
+    "regionName": "مكة المكرمة"
+  },
+  "131": {
+    "cityName": "أحد رفيده",
+    "regionId": "6",
+    "regionName": "عسير"
+  },
+  "132": {
+    "cityName": "العقيق",
+    "regionId": "12",
+    "regionName": "الباحة"
+  },
+  "134": {
+    "cityName": "الدلم",
+    "regionId": "1",
+    "regionName": "الرياض"
+  },
+  "135": {
+    "cityName": "حبونا",
+    "regionId": "11",
+    "regionName": "نجران"
+  },
+  "136": {
+    "cityName": "الجمش",
+    "regionId": "1"
+  },
+  "137": {
+    "cityName": "ساجر",
+    "regionId": "1"
+  },
+  "141": {
+    "cityName": "الريث",
+    "regionId": "10",
+    "regionName": "جازان"
+  },
+  "143": {
+    "cityName": "بحرة",
+    "regionId": "2",
+    "regionName": "مكة المكرمة"
+  },
+  "144": {
+    "cityName": "المجاردة",
+    "regionId": "6",
+    "regionName": "عسير"
+  },
+  "149": {
+    "cityName": "وادي بن هشبل",
+    "regionId": "1"
+  },
+  "150": {
+    "cityName": "بني عمرو",
+    "regionId": "1"
+  },
+  "151": {
+    "cityName": "البشائر",
+    "regionId": "1"
+  },
+  "152": {
+    "cityName": "تنومة",
+    "regionId": "6",
+    "regionName": "عسير"
+  },
+  "153": {
+    "cityName": "أحد المسارحة",
+    "regionId": "10",
+    "regionName": "جازان"
+  },
+  "155": {
+    "cityName": "بارق",
+    "regionId": "6",
+    "regionName": "عسير"
+  },
+  "156": {
+    "cityName": "العارضة",
+    "regionId": "10",
+    "regionName": "جازان"
+  },
+  "157": {
+    "cityName": "بيش",
+    "regionId": "10",
+    "regionName": "جازان"
+  },
+  "159": {
+    "cityName": "فيفاء",
+    "regionId": "10",
+    "regionName": "جازان"
+  },
+  "161": {
+    "cityName": "المضايا",
+    "regionId": "1"
+  },
+  "167": {
+    "cityName": "ضمد",
+    "regionId": "10",
+    "regionName": "جازان"
+  },
+  "168": {
+    "cityName": "الشقيق",
+    "regionId": "1"
+  },
+  "172": {
+    "cityName": "الحصينية",
+    "regionId": "1"
+  },
+  "176": {
+    "cityName": "زضماء",
+    "regionId": "1"
+  },
+  "177": {
+    "cityName": "الشماسية",
+    "regionId": "4",
+    "regionName": "القصيم"
+  },
+  "178": {
+    "cityName": "الشمل",
+    "regionId": "8",
+    "regionName": "حائل"
+  },
+  "179": {
+    "cityName": "الشنان",
+    "regionId": "8",
+    "regionName": "حائل"
+  },
+  "180": {
+    "cityName": "العرضية الجنوبية",
+    "regionId": "1"
+  },
+  "182": {
+    "cityName": "ارطاوي الرس",
+    "regionId": "1"
+  },
+  "183": {
+    "cityName": "مرات",
+    "regionId": "1",
+    "regionName": "الرياض"
+  },
+  "184": {
+    "cityName": "تاروت",
+    "regionId": "1"
+  },
+  "188": {
+    "cityName": "الحريق",
+    "regionId": "1",
+    "regionName": "الرياض"
+  },
+  "189": {
+    "cityName": "الرين",
+    "regionId": "1",
+    "regionName": "الرياض"
+  },
+  "191": {
+    "cityName": "الشعف",
+    "regionId": "1"
+  },
+  "192": {
+    "cityName": "طريب",
+    "regionId": "6",
+    "regionName": "عسير"
+  },
+  "197": {
+    "cityName": "الحرجة",
+    "regionId": "6",
+    "regionName": "عسير"
+  },
+  "209": {
+    "cityName": "نفي",
+    "regionId": "1"
+  },
+  "211": {
+    "cityName": "يدمة",
+    "regionId": "11",
+    "regionName": "نجران"
+  },
+  "212": {
+    "cityName": "ثار",
+    "regionId": "11",
+    "regionName": "نجران"
+  },
+  "213": {
+    "cityName": "بدر الجنوب",
+    "regionId": "11",
+    "regionName": "نجران"
+  },
+  "214": {
+    "cityName": "العيدابي",
+    "regionId": "10",
+    "regionName": "جازان"
+  },
+  "215": {
+    "cityName": "النبهانية",
+    "regionId": "4",
+    "regionName": "القصيم"
+  },
+  "216": {
+    "cityName": "الكامل",
+    "regionId": "2",
+    "regionName": "مكة المكرمة"
+  },
+  "222": {
+    "cityName": "السعبة",
+    "regionId": "1"
+  },
+  "225": {
+    "cityName": "دخنة",
+    "regionId": "1"
+  },
+  "228": {
+    "cityName": "القوارة",
+    "regionId": "1"
+  },
+  "239": {
+    "cityName": "البجادية",
+    "regionId": "1"
+  },
+  "243": {
+    "cityName": "الظاهرية بمنطقة القصيم",
+    "regionId": "1"
+  },
+  "247": {
+    "cityName": "وادي الفرع",
+    "regionId": "3",
+    "regionName": "المدينة المنورة"
+  },
+  "253": {
+    "cityName": "الدليمية",
+    "regionId": "1"
+  },
+  "258": {
+    "cityName": "رسى",
+    "regionId": "1"
+  },
+  "260": {
+    "cityName": "الذيبية بالقصيم",
+    "regionId": "1"
+  },
+  "262": {
+    "cityName": "موقق",
+    "regionId": "8",
+    "regionName": "حائل"
+  },
+  "267": {
+    "cityName": "الأمواه",
+    "regionId": "1"
+  },
+  "268": {
+    "cityName": "الغزالة",
+    "regionId": "8",
+    "regionName": "حائل"
+  },
+  "275": {
+    "cityName": "أبو راكة",
+    "regionId": "1"
+  },
+  "278": {
+    "cityName": "مدركة",
+    "regionId": "1"
+  },
+  "279": {
+    "cityName": "هروب",
+    "regionId": "10",
+    "regionName": "جازان"
+  },
+  "280": {
+    "cityName": "السه",
+    "regionId": "1"
+  },
+  "285": {
+    "cityName": "الحجرة",
+    "regionId": "12",
+    "regionName": "الباحة"
+  },
+  "286": {
+    "cityName": "زبن حسن",
+    "regionId": "1"
+  },
+  "288": {
+    "cityName": "غامد الزناد",
+    "regionId": "12",
+    "regionName": "الباحة"
+  },
+  "656": {
+    "cityName": "خليص",
+    "regionId": "2",
+    "regionName": "مكة المكرمة"
+  },
+  "1947": {
+    "cityName": "الخبراء",
+    "regionId": "1"
+  }
+}

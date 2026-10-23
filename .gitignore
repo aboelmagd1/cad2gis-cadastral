@@ -1,0 +1,114 @@
+# =============================================================================
+# CAD2GIS Cadastral Transformation Solution - .gitignore
+# Exclusively tracks: Cad2Gis/, HelperFiles/, prompts/
+# Blocks: draft/, example/, Export_Output/, scratch/, helpers/, build artifacts,
+#         client datasets (.dwg, .dxf, .gdb), private state & temporary files.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 1. Root Level Whitelist Strategy
+# -----------------------------------------------------------------------------
+# Ignore everything at the root by default
+/*
+
+# Whitelist exclusively the project directories and essential repo files
+!/Cad2Gis/
+!/HelperFiles/
+!/prompts/
+!/.gitignore
+!/README.md
+
+# -----------------------------------------------------------------------------
+# 2. Build Artifacts & Compiler Outputs
+# -----------------------------------------------------------------------------
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]uild/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+.vs/
+.vscode/
+.idea/
+
+# -----------------------------------------------------------------------------
+# 3. ArcGIS Pro Add-In Packages & Geodatabase Artifacts
+# -----------------------------------------------------------------------------
+# Exclude packaged binaries (they should be built from source)
+*.esriAddinX
+*.zip
+*.rar
+*.7z
+
+# Exclude File Geodatabases, Shapefile locks and ESRI caches
+*.gdb/
+*.gdb
+*.lock
+*.sr.lock
+*.xml.lock
+*.edx
+*.pck
+*.shp.xml
+
+# -----------------------------------------------------------------------------
+# 4. CAD & Client Proprietary Drawing Files
+# -----------------------------------------------------------------------------
+*.dwg
+*.dxf
+*.bak
+*.dwt
+
+# -----------------------------------------------------------------------------
+# 5. Python Bytecode, Caches & Environments
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+
+# -----------------------------------------------------------------------------
+# 6. Local User State, Scratch Directories & Logs
+# -----------------------------------------------------------------------------
+**/state/last_export.json
+**/settings.local.json
+**/scratch/
+**/temp/
+**/tmp/
+*.tmp
+*.swp
+*.swo
+
+# Ignore logs but preserve directory via .gitkeep
+*.log
+**/logs/*.log
+!**/logs/.gitkeep
+
+# -----------------------------------------------------------------------------
+# 7. Operating System & Office Temporary Lock Files
+# -----------------------------------------------------------------------------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+~$*.xlsx
+~$*.xls
+~$*.docx
+~$*.doc

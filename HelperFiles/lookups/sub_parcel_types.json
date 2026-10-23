@@ -1,0 +1,8 @@
+[
+  { "code": "GARDEN", "arabic": "حديقة", "borderType": "PAK" },
+  { "code": "CORRIDOR", "arabic": "ممر", "borderType": "LNE" },
+  { "code": "SERVICE", "arabic": "خدمات", "borderType": "SRV" },
+  { "code": "UTILITY", "arabic": "مرفق عام", "borderType": "UTL" },
+  { "code": "PARKING", "arabic": "مواقف سيارات", "borderType": "PRK" },
+  { "code": "MOSQUE", "arabic": "مسجد", "borderType": "MSQ" }
+]

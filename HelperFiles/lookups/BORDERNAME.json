@@ -1,0 +1,6 @@
+{
+  "1": { "name": "North", "arabic": "شمال" },
+  "2": { "name": "East", "arabic": "شرق" },
+  "3": { "name": "South", "arabic": "جنوب" },
+  "4": { "name": "West", "arabic": "غرب" }
+}

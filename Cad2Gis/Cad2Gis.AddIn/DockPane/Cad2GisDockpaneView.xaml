@@ -1,0 +1,1855 @@
+<UserControl x:Class="Cad2Gis.AddIn.DockPane.Cad2GisDockpaneView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:Cad2Gis.AddIn.DockPane"
+             mc:Ignorable="d" 
+             d:DesignHeight="850" d:DesignWidth="450"
+             FlowDirection="LeftToRight"
+             Background="#0B0F19"
+             Foreground="#F8FAFC"
+             FontFamily="Segoe UI, Tahoma, Arial, sans-serif">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <local:GeometryToVisibilityConverter x:Key="GeomToVis" />
+
+        <!-- Modern CAD Category Tabs Style -->
+        <Style x:Key="ModernCadTabButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0,0,0,2.5"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#94A3B8"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="9,6,9,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Foreground" Value="#F1F5F9"/>
+                </Trigger>
+                <Trigger Property="Tag" Value="True">
+                    <Setter Property="Foreground" Value="#00E699"/>
+                    <Setter Property="BorderBrush" Value="#00E699"/>
+                    <Setter Property="FontWeight" Value="Bold"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Dark DataGrid Column Headers -->
+        <Style x:Key="CadDataGridHeaderStyle" TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="#172136"/>
+            <Setter Property="Foreground" Value="#94A3B8"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="Padding" Value="6,5"/>
+            <Setter Property="BorderBrush" Value="#24324D"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        </Style>
+
+        <!-- Dark DataGrid Rows -->
+        <Style x:Key="CadDataGridRowStyle" TargetType="DataGridRow">
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Background" Value="#101726"/>
+            <Setter Property="Foreground" Value="#F8FAFC"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="BorderBrush" Value="#1E293B"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#1E293B"/>
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#1E3A5F"/>
+                    <Setter Property="Foreground" Value="#FFFFFF"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="CadCheckBoxStyle" TargetType="CheckBox">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- Dark DataGrid Cell Style -->
+        <Style TargetType="DataGridCell">
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#F8FAFC"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#1E3A5F"/>
+                    <Setter Property="Foreground" Value="#FFFFFF"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Unified Dark Control Styles -->
+        <Style x:Key="HeaderLabel" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#CBD5E1"/>
+            <Setter Property="Margin" Value="0,4,0,2"/>
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+
+        <Style x:Key="ModernTextBox" TargetType="TextBox">
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="BorderBrush" Value="#334155"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Background" Value="#111827"/>
+            <Setter Property="Foreground" Value="#F8FAFC"/>
+            <Setter Property="CaretBrush" Value="#38BDF8"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3">
+                            <Grid>
+                                <ScrollViewer x:Name="PART_ContentHost" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"
+                                              VerticalAlignment="Center" Padding="{TemplateBinding Padding}"/>
+                                <TextBlock Text="{TemplateBinding Tag}" Foreground="#64748B" FontSize="11" Margin="8,0,0,0"
+                                           VerticalAlignment="Center" IsHitTestVisible="False">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Text, RelativeSource={RelativeSource TemplatedParent}}" Value="">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Text, RelativeSource={RelativeSource TemplatedParent}}" Value="{x:Null}">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Dark ComboBox Item Style -->
+        <Style x:Key="DarkComboBoxItemStyle" TargetType="ComboBoxItem">
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Background" Value="#111827"/>
+            <Setter Property="Foreground" Value="#F8FAFC"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="ItemBorder"
+                                Background="#111827"
+                                BorderBrush="Transparent"
+                                BorderThickness="0"
+                                Padding="10,6"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter x:Name="ContentSite"
+                                              TextElement.Foreground="#F8FAFC"
+                                              TextElement.FontSize="11"
+                                              TextElement.FontWeight="Normal"
+                                              HorizontalAlignment="Left"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#2563EB"/>
+                                <Setter TargetName="ContentSite" Property="TextElement.Foreground" Value="#FFFFFF"/>
+                                <Setter TargetName="ContentSite" Property="TextElement.FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#1E3A5F"/>
+                                <Setter TargetName="ContentSite" Property="TextElement.Foreground" Value="#00E699"/>
+                                <Setter TargetName="ContentSite" Property="TextElement.FontWeight" Value="Bold"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ContentSite" Property="TextElement.Foreground" Value="#64748B"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="ComboBoxItem" BasedOn="{StaticResource DarkComboBoxItemStyle}"/>
+
+        <!-- ToggleButton for Dark ComboBox -->
+        <ControlTemplate x:Key="DarkComboBoxToggleButton" TargetType="ToggleButton">
+            <Border x:Name="TemplateRoot"
+                    Background="#111827"
+                    BorderBrush="#334155"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    SnapsToDevicePixels="True">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="24"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Background="#111827" CornerRadius="4,0,0,4"/>
+                    <Border Grid.Column="1" Background="#172136" CornerRadius="0,4,4,0">
+                        <Path x:Name="Arrow"
+                              Data="M 0 0 L 4 4 L 8 0 Z"
+                              Fill="#94A3B8"
+                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="TemplateRoot" Property="BorderBrush" Value="#38BDF8"/>
+                    <Setter TargetName="Arrow" Property="Fill" Value="#38BDF8"/>
+                </Trigger>
+                <Trigger Property="IsChecked" Value="True">
+                    <Setter TargetName="TemplateRoot" Property="BorderBrush" Value="#00E699"/>
+                    <Setter TargetName="Arrow" Property="Fill" Value="#00E699"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter TargetName="TemplateRoot" Property="Background" Value="#1E293B"/>
+                    <Setter TargetName="Arrow" Property="Fill" Value="#475569"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <!-- Dark ComboBox Main Style -->
+        <Style x:Key="DarkComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="Background" Value="#111827"/>
+            <Setter Property="Foreground" Value="#F8FAFC"/>
+            <Setter Property="BorderBrush" Value="#334155"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,2"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource DarkComboBoxItemStyle}"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid x:Name="MainGrid" SnapsToDevicePixels="True">
+                            <ToggleButton x:Name="ToggleButton"
+                                          Template="{StaticResource DarkComboBoxToggleButton}"
+                                          Focusable="False"
+                                          ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"/>
+
+                            <ContentPresenter x:Name="ContentSite"
+                                              IsHitTestVisible="False"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                              TextElement.Foreground="#F8FAFC"
+                                              TextElement.FontSize="11"
+                                              Margin="8,2,26,2"
+                                              VerticalAlignment="Center"
+                                              HorizontalAlignment="Left"/>
+
+                            <Popup x:Name="PART_Popup"
+                                   AllowsTransparency="True"
+                                   IsOpen="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                                   Placement="Bottom"
+                                   PopupAnimation="Slide"
+                                   Focusable="False">
+                                <Grid x:Name="DropDown"
+                                      MinWidth="{Binding ActualWidth, ElementName=MainGrid}"
+                                      MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                      SnapsToDevicePixels="True">
+                                    <Border x:Name="DropDownBorder"
+                                            Background="#111827"
+                                            BorderBrush="#334155"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Margin="0,2,0,0">
+                                        <Border.Effect>
+                                            <DropShadowEffect BlurRadius="8" ShadowDepth="3" Direction="270" Color="#000000" Opacity="0.5"/>
+                                        </Border.Effect>
+                                        <ScrollViewer SnapsToDevicePixels="True" CanContentScroll="True" Background="#111827">
+                                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" Background="#111827"/>
+                                        </ScrollViewer>
+                                    </Border>
+                                </Grid>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="HasItems" Value="False">
+                                <Setter TargetName="DropDownBorder" Property="MinHeight" Value="24"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#64748B"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="BorderBrush" Value="#38BDF8"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="ComboBox" BasedOn="{StaticResource DarkComboBoxStyle}"/>
+
+        <!-- Dark MenuItem Style -->
+        <Style x:Key="DarkMenuItemStyle" TargetType="MenuItem">
+            <Setter Property="Background" Value="#1E293B"/>
+            <Setter Property="Foreground" Value="#F8FAFC"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="MenuBorder" Background="#1E293B" BorderThickness="0" Padding="10,6" SnapsToDevicePixels="True">
+                            <ContentPresenter x:Name="HeaderHost" ContentSource="Header" RecognizesAccessKey="True"
+                                              TextElement.Foreground="#F8FAFC"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="MenuBorder" Property="Background" Value="#2563EB"/>
+                                <Setter TargetName="HeaderHost" Property="TextElement.Foreground" Value="#FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="HeaderHost" Property="TextElement.Foreground" Value="#64748B"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="MenuItem" BasedOn="{StaticResource DarkMenuItemStyle}"/>
+
+        <!-- Dark ToolTip Style -->
+        <Style TargetType="ToolTip">
+            <Setter Property="Background" Value="#0F172A"/>
+            <Setter Property="Foreground" Value="#F8FAFC"/>
+            <Setter Property="BorderBrush" Value="#334155"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="#E2E8F0"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+
+        <Style TargetType="RadioButton">
+            <Setter Property="Foreground" Value="#E2E8F0"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+
+        <!-- Dark TabControl and TabItem Styles -->
+        <Style TargetType="TabControl">
+            <Setter Property="Background" Value="#0F172A"/>
+            <Setter Property="BorderBrush" Value="#334155"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+
+        <Style TargetType="TabItem">
+            <Setter Property="Background" Value="#1E293B"/>
+            <Setter Property="Foreground" Value="#94A3B8"/>
+            <Setter Property="BorderBrush" Value="#334155"/>
+            <Setter Property="BorderThickness" Value="1,1,1,0"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="TabBorder" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4,4,0,0" Padding="{TemplateBinding Padding}" Margin="0,0,2,0">
+                            <ContentPresenter ContentSource="Header" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TabBorder" Property="Background" Value="#24324D"/>
+                                <Setter Property="Foreground" Value="#F8FAFC"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="TabBorder" Property="Background" Value="#0F172A"/>
+                                <Setter TargetName="TabBorder" Property="BorderBrush" Value="#00E699"/>
+                                <Setter TargetName="TabBorder" Property="BorderThickness" Value="1,2.5,1,0"/>
+                                <Setter Property="Foreground" Value="#00E699"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ActionButton" TargetType="Button">
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Padding" Value="10,3"/>
+            <Setter Property="Background" Value="#2563EB"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,4,0,4"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#1D4ED8"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#475569"/>
+                    <Setter Property="Foreground" Value="#94A3B8"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <!-- Header & Badge -->
+            <RowDefinition Height="*"/>    <!-- Tabs -->
+            <RowDefinition Height="Auto"/> <!-- Footer / Pipeline Button & Progress -->
+            <RowDefinition Height="Auto"/> <!-- Status box -->
+        </Grid.RowDefinitions>
+
+        <!-- Header & Spatial Enrichment Badge -->
+        <Border Grid.Row="0" Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,8">
+            <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Width="36" Height="36" CornerRadius="6" Background="#111827" BorderBrush="#334155" BorderThickness="1" Margin="0,0,10,0" VerticalAlignment="Center">
+                        <Image Source="pack://application:,,,/Cad2Gis.AddIn;component/Images/MainIcon_64.png" Width="30" Height="30" RenderOptions.BitmapScalingMode="HighQuality"/>
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="CAD2GIS Cadastral Transformation" FontSize="13.5" FontWeight="Bold" Foreground="White"/>
+                        <TextBlock Text="MOMRAH / Balady Compliance v3.3.0" FontSize="10" Foreground="#94A3B8"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Background="#991B1B" CornerRadius="4" Padding="8,4" Margin="0,0,4,0"
+                                Visibility="{Binding IsDemoBannerVisible, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="🧪 DEMO PROJECT" FontSize="10" FontWeight="Bold" Foreground="#FEE2E2"/>
+                        </Border>
+                        <Border Background="#0F766E" CornerRadius="4" Padding="8,4">
+                            <TextBlock Text="⚡ Production Mode" FontSize="10" FontWeight="Bold" Foreground="#CCFBF1"/>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Demo Warning Banner -->
+                <Border Background="#7C2D12" BorderBrush="#EA580C" BorderThickness="1" CornerRadius="4" Padding="6,3" Margin="0,6,0,0"
+                        Visibility="{Binding IsDemoBannerVisible, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="⚠️ DEMO MODE: Data generated from synthetic demo project. Final export is guarded." Foreground="#FFEDD5" FontSize="9.5" FontWeight="SemiBold"/>
+                </Border>
+
+                <!-- Admin and HelperFiles resolution badge -->
+                <Border Background="#111827" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="6,3" Margin="0,6,0,0">
+                    <StackPanel>
+                        <TextBlock Text="{Binding AdminBadgeText}" FontSize="10" FontWeight="SemiBold" Foreground="#38BDF8"/>
+                        <TextBlock Text="{Binding AddressPreviewText}" FontSize="10" Foreground="#F1F5F9" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding HelperFilesPathDisplay, StringFormat='📁 HelperFiles: {0}'}" FontSize="9" Foreground="#94A3B8" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                        <TextBlock Text="{Binding HelperFallbackWarning}" Visibility="{Binding IsHelperFallbackActive, Converter={StaticResource BoolToVis}}" FontSize="9" FontWeight="SemiBold" Foreground="#F59E0B" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <!-- Tabbed Stepper -->
+        <TabControl Grid.Row="1" SelectedIndex="{Binding SelectedTabIndex}" BorderBrush="#334155" Background="#0F172A">
+            
+            <!-- Tab 1: Layers & Project -->
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Image Source="pack://application:,,,/Cad2Gis.AddIn;component/Images/Step1_32.png" Width="14" Height="14" Margin="0,0,5,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <TextBlock Text="1. CAD &amp; Spatial" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
+                    <StackPanel>
+                        <!-- CAD File Selector Card (ملف الكاد) -->
+                        <Border Background="#1E293B" BorderBrush="#2563EB" BorderThickness="1.2" CornerRadius="6" Padding="8" Margin="0,0,0,8">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Source CAD Drawing (.dwg / .dxf) | ملف الكاد:" FontWeight="Bold" Foreground="#60A5FA" FontSize="11" VerticalAlignment="Center"/>
+                                    <Border Grid.Column="1" Background="#1E3A5F" CornerRadius="3" Padding="6,2">
+                                        <TextBlock Text="AutoCAD / Civil 3D" FontSize="9" FontWeight="SemiBold" Foreground="#93C5FD"/>
+                                    </Border>
+                                </Grid>
+                                
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" Text="{Binding CadDrawingPath, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}" Margin="0,0,4,0" ToolTip="Select or paste path to .dwg or .dxf CAD drawing" Tag="مثال: C:\Projects\Masterplan.dwg (انقر Browse لاختيار ملف الكاد)"/>
+                                    <Button Grid.Column="1" Content="📁 Browse CAD..." Command="{Binding BrowseCadDrawingCommand}" Style="{StaticResource ActionButton}" Height="26" Padding="10,2" Margin="0" Background="#2563EB"/>
+                                </Grid>
+                                
+                                <Button Content="🔄 تحويل الكاد إلى داتاسيت (Convert CAD to GDB Dataset)" Command="{Binding ConvertCadToDatasetCommand}" Style="{StaticResource ActionButton}" Height="28" Background="#0284C7" Margin="0,4,0,2" ToolTip="تحويل عناصر الرسم مباشرة إلى داتاسيت داخل الجيوداتابيز بالنظام الإحداثي المختار ليسهل التعامل معها"/>
+                                <TextBlock Text="يحوّل الكاد إلى داتاسيت بالنظام الإحداثي المختار داخل الجيوداتابيز لتسهيل معالجة المضلعات والخطوط." FontSize="9" Foreground="#94A3B8" Margin="0,0,0,4"/>
+
+                                <Grid Margin="0,2,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Supported: AutoCAD .dwg and .dxf." FontSize="9.5" Foreground="#94A3B8" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1" Content="🧪 Load Demo Project" Command="{Binding LoadDemoProjectCommand}" Style="{StaticResource ActionButton}" Height="22" Padding="8,0" Margin="0" Background="#334155" FontSize="9.5" ToolTip="Load synthetic benchmark demo project for testing"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Expected Layers Excel Card (اختيار وقراءة ملف الإكسل) -->
+                        <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1.2" CornerRadius="6" Padding="8" Margin="0,0,0,8">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Expected Layers Excel (ملف إكسل الطبقات المتوقعة):" FontWeight="Bold" Foreground="#38BDF8" FontSize="11" VerticalAlignment="Center"/>
+                                    <Border Grid.Column="1" Background="#0F766E" CornerRadius="3" Padding="6,2">
+                                        <TextBlock Text="MOMRAH / Profile Rules" FontSize="9" FontWeight="SemiBold" Foreground="#CCFBF1"/>
+                                    </Border>
+                                </Grid>
+                                <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" Text="{Binding ExpectedLayersExcelPath, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}" Margin="0,0,4,0" ToolTip="Expected_Layers.xlsx" Tag="Expected_Layers.xlsx"/>
+                                    <Button Grid.Column="1" Content="📁 Browse..." Command="{Binding BrowseExpectedLayersCommand}" Style="{StaticResource ActionButton}" Height="26" Padding="8,2" Margin="0" Background="#334155"/>
+                                </Grid>
+                                <Button Content="📥 اقرأ واستورد الطبقات من الإكسل (Load Layers from Excel)" Command="{Binding LoadExpectedLayersCommand}" Style="{StaticResource ActionButton}" Height="26" Background="#0F766E" Margin="0,2,0,0" ToolTip="قراءة وتصنيف طبقات المخطط مباشرة من ملف الإكسل المختار"/>
+                                <TextBlock Text="يقرأ أسماء الطبقات وتصنيفاتها وقواعد المطابقة مباشرة من ملف الإكسل المحدد." FontSize="9.5" Foreground="#94A3B8" Margin="0,3,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,3,0">
+                                <TextBlock Text="Consultant Profile:" Style="{StaticResource HeaderLabel}"/>
+                                <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"
+                                          ItemsSource="{Binding AvailableProfiles}" SelectedItem="{Binding SelectedProfile}" Height="26" Margin="0,0,0,6"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Margin="3,0,0,0">
+                                <TextBlock Text="Working UTM CRS (Zone):" Style="{StaticResource HeaderLabel}"/>
+                                <ComboBox Style="{StaticResource DarkComboBoxStyle}" ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"
+                                          ItemsSource="{Binding SupportedUtmZones}" SelectedItem="{Binding SelectedUtmZone}" Height="26" Margin="0,0,0,2"/>
+                                <TextBlock Text="{Binding CrsPlausibilityRecommendation}" Foreground="#38BDF8" FontSize="9" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock Text="Target Geodatabase (.gdb):" Style="{StaticResource HeaderLabel}"/>
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Text="{Binding GdbPath, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}" Margin="0,0,3,0"/>
+                            <Button Grid.Column="1" Content="..." Command="{Binding BrowseGdbPathCommand}" ToolTip="تصفح لاختيار قاعدة بيانات Geodatabase مخصصة" Width="26" Height="26" Margin="0,0,3,0" Background="#334155" Foreground="White" BorderThickness="0"/>
+                            <Button Grid.Column="2" Content="📦 مجلد Export_Output" Command="{Binding UseExportOutputGdbCommand}" ToolTip="تعيين Geodatabase الموحدة داخل مجلد Export_Output (الخيار الأفضل والموصى به لجمع الـ Dataset والـ Feature Classes في مكان واحد)" Height="26" Padding="6,0" Margin="0,0,3,0" Background="#1E293B" Foreground="#38BDF8" BorderBrush="#38BDF8" BorderThickness="1"/>
+                            <Button Grid.Column="3" Content="🎯 قاعدة المشروع" Command="{Binding UseProjectGdbCommand}" ToolTip="استخدام قاعدة بيانات مشروع ArcGIS Pro الافتراضية (Default Geodatabase)" Height="26" Padding="6,0" Background="#1E293B" Foreground="#94A3B8" BorderBrush="#475569" BorderThickness="1"/>
+                        </Grid>
+
+                        <Button Content="🔍 فحص واستيراد طبقات الكاد (Scan &amp; Load CAD Layers)" Command="{Binding ScanCadLayersCommand}" Style="{StaticResource ActionButton}" Margin="0,4,0,6"/>
+
+                        <!-- Modern CAD Layers Table matching Image 2 -->
+                        <Border Background="#101726" BorderBrush="#334155" BorderThickness="1.2" CornerRadius="6" Margin="0,4,0,8">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/> <!-- 4 Tabs Strip -->
+                                    <RowDefinition Height="Auto"/> <!-- Quick Action Toolbar for Layer Selection -->
+                                    <RowDefinition Height="240"/>  <!-- Rich Table -->
+                                </Grid.RowDefinitions>
+
+                                <!-- Category Tabs Strip ([Main Parcels], [Sub-Parcels / Utilities], [Text & Annotations], [Roads & References]) -->
+                                <Border Grid.Row="0" Background="#0B0F19" BorderBrush="#24324D" BorderThickness="0,0,0,1.2" CornerRadius="5,5,0,0">
+                                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                                        <StackPanel Orientation="Horizontal" Margin="2,0,2,0">
+                                            <!-- Tab 1: Main Parcels -->
+                                            <Button Style="{StaticResource ModernCadTabButton}"
+                                                    Command="{Binding SelectCadTabCommand}" CommandParameter="Main Parcels"
+                                                    Tag="{Binding IsMainParcelsTabSelected}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="[Main Parcels]"/>
+                                                    <TextBlock Text="{Binding MainParcelsBadge}" FontSize="9.5" Opacity="0.85" Margin="3,0,0,0"/>
+                                                </StackPanel>
+                                            </Button>
+
+                                            <!-- Tab 2: Sub-Parcels / Utilities -->
+                                            <Button Style="{StaticResource ModernCadTabButton}"
+                                                    Command="{Binding SelectCadTabCommand}" CommandParameter="Sub-Parcels / Utilities"
+                                                    Tag="{Binding IsSubParcelsTabSelected}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="[Sub-Parcels / Utilities]"/>
+                                                    <TextBlock Text="{Binding SubParcelsBadge}" FontSize="9.5" Opacity="0.85" Margin="3,0,0,0"/>
+                                                </StackPanel>
+                                            </Button>
+
+                                            <!-- Tab 3: Text & Annotations -->
+                                            <Button Style="{StaticResource ModernCadTabButton}"
+                                                    Command="{Binding SelectCadTabCommand}" CommandParameter="Text &amp; Annotations"
+                                                    Tag="{Binding IsTextAnnotationsTabSelected}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="[Text &amp; Annotations]"/>
+                                                    <TextBlock Text="{Binding TextAnnotationsBadge}" FontSize="9.5" Opacity="0.85" Margin="3,0,0,0"/>
+                                                </StackPanel>
+                                            </Button>
+
+                                            <!-- Tab 4: Roads & References -->
+                                            <Button Style="{StaticResource ModernCadTabButton}"
+                                                    Command="{Binding SelectCadTabCommand}" CommandParameter="Roads &amp; References"
+                                                    Tag="{Binding IsRoadsReferencesTabSelected}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="[Roads &amp; References] (Ignored)"/>
+                                                    <TextBlock Text="{Binding RoadsReferencesBadge}" FontSize="9.5" Opacity="0.85" Margin="3,0,0,0"/>
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+                                    </ScrollViewer>
+                                </Border>
+
+                                <!-- Quick Action Toolbar for Layer Selection -->
+                                <Border Grid.Row="1" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="6,3">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Live Selected Count Badge -->
+                                        <Border Grid.Column="0" Background="#172554" BorderBrush="#1D4ED8" BorderThickness="1" CornerRadius="4" Padding="7,2" Margin="0,0,6,0" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <TextBlock Text="☑ " Foreground="#60A5FA" FontWeight="Bold" FontSize="11" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding SelectedLayersStatus}" Foreground="#93C5FD" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Button Grid.Column="1" Content="🎯 تحديد هذه الطبقة فقط"
+                                                Command="{Binding SelectOnlyCurrentLayerCommand}" CommandParameter="{Binding SelectedCadLayer}"
+                                                Style="{StaticResource ActionButton}" Height="23" FontSize="9.5" FontWeight="SemiBold" Background="#2563EB" Margin="0,0,4,0"
+                                                ToolTip="تحديد الطبقة المختارة حالياً في الجدول واستبعاد كل باقي الطبقات لبناء المضلعات"/>
+                                        <Button Grid.Column="2" Content="✔ تحديد الكل"
+                                                Command="{Binding SelectAllLayersCommand}"
+                                                Style="{StaticResource ActionButton}" Height="23" FontSize="9.5" Background="#334155" Margin="0,0,4,0"
+                                                ToolTip="تفعيل علامة الصح لكل طبقات هذا القسم"/>
+                                        <Button Grid.Column="3" Content="❌ إلغاء الكل"
+                                                Command="{Binding DeselectAllLayersCommand}"
+                                                Style="{StaticResource ActionButton}" Height="23" FontSize="9.5" Background="#334155"
+                                                ToolTip="إلغاء تفعيل طبقات هذا القسم"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Rich DataGrid -->
+                                <DataGrid Grid.Row="2" ItemsSource="{Binding FilteredCadLayers}" 
+                                          SelectedItem="{Binding SelectedCadLayer, Mode=TwoWay}"
+                                          AutoGenerateColumns="False" CanUserAddRows="False"
+                                          Background="#101726" RowBackground="#101726" AlternatingRowBackground="#141D2E"
+                                          ColumnHeaderStyle="{StaticResource CadDataGridHeaderStyle}"
+                                          RowStyle="{StaticResource CadDataGridRowStyle}"
+                                          GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#1E293B"
+                                          BorderThickness="0" SelectionMode="Single" SelectionUnit="FullRow"
+                                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+
+                                    <!-- ContextMenu for moving / reassigning layer -->
+                                    <DataGrid.ContextMenu>
+                                        <ContextMenu Background="#1E293B" Foreground="#F8FAFC" BorderBrush="#334155">
+                                            <MenuItem Header="🎯 اختيار هذه الطبقة فقط (Select Only This Layer)" 
+                                                      Command="{Binding DataContext.SelectOnlyCurrentLayerCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" 
+                                                      CommandParameter="{Binding SelectedCadLayer}"/>
+                                            <MenuItem Header="🎯 اختيار هذه الطبقة والانتقال لإنشاء البارسلات ➔ (Select &amp; Proceed to Parcels)" 
+                                                      Command="{Binding DataContext.SelectLayerAndProceedToStep2Command, RelativeSource={RelativeSource AncestorType=UserControl}}" 
+                                                      CommandParameter="{Binding SelectedCadLayer}"/>
+                                            <Separator Background="#334155"/>
+                                            <MenuItem Header="Move to [Main Parcels]" Command="{Binding MoveLayerToCategoryCommand}" CommandParameter="Main Parcels"/>
+                                            <MenuItem Header="Move to [Sub-Parcels / Utilities]" Command="{Binding MoveLayerToCategoryCommand}" CommandParameter="Sub-Parcels / Utilities"/>
+                                            <MenuItem Header="Move to [Text &amp; Annotations]" Command="{Binding MoveLayerToCategoryCommand}" CommandParameter="Text &amp; Annotations"/>
+                                            <MenuItem Header="Move to [Roads &amp; References]" Command="{Binding MoveLayerToCategoryCommand}" CommandParameter="Roads &amp; References"/>
+                                        </ContextMenu>
+                                    </DataGrid.ContextMenu>
+
+                                    <DataGrid.Columns>
+                                        <!-- Select All Checkbox -->
+                                        <DataGridTemplateColumn Width="38">
+                                            <DataGridTemplateColumn.Header>
+                                                <CheckBox IsChecked="{Binding DataContext.IsAllSelectedInCurrentTab, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                          Style="{StaticResource CadCheckBoxStyle}"
+                                                          ToolTip="Select / Deselect all layers in this tab"/>
+                                            </DataGridTemplateColumn.Header>
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <CheckBox IsChecked="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}"
+                                                              Style="{StaticResource CadCheckBoxStyle}"/>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+
+                                        <!-- Layer Name (with Color Swatch) -->
+                                        <DataGridTemplateColumn Header="Layer Name ⇅" Width="185">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,4,0">
+                                                        <Border Width="11" Height="11" CornerRadius="2" Margin="0,0,8,0"
+                                                                Background="{Binding Color}" VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding LayerName}" FontWeight="SemiBold" Foreground="#F8FAFC"
+                                                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+
+                                        <!-- Entity Count -->
+                                        <DataGridTextColumn Header="Count ⇅" Binding="{Binding FormattedCount}" Width="75" IsReadOnly="True">
+                                            <DataGridTextColumn.ElementStyle>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="HorizontalAlignment" Value="Center"/>
+                                                    <Setter Property="VerticalAlignment" Value="Center"/>
+                                                    <Setter Property="Foreground" Value="#CBD5E1"/>
+                                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                                </Style>
+                                            </DataGridTextColumn.ElementStyle>
+                                        </DataGridTextColumn>
+
+                                        <!-- Geometry Type Badge -->
+                                        <DataGridTemplateColumn Header="Geom Type" Width="110">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Border Background="#1E293B" CornerRadius="4" Padding="6,2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <Path Data="M 0,0 L 8,0 L 8,8 L 0,8 Z" Fill="#38BDF8" Width="8" Height="8" Margin="0,0,5,0" VerticalAlignment="Center"
+                                                                  Visibility="{Binding GeometryType, Converter={StaticResource GeomToVis}, ConverterParameter='Polygon'}"/>
+                                                            <Path Data="M 0,8 L 8,0" Stroke="#F59E0B" StrokeThickness="1.5" Width="8" Height="8" Margin="0,0,5,0" VerticalAlignment="Center"
+                                                                  Visibility="{Binding GeometryType, Converter={StaticResource GeomToVis}, ConverterParameter='Line'}"/>
+                                                            <Ellipse Fill="#22C55E" Width="6" Height="6" Margin="0,0,5,0" VerticalAlignment="Center"
+                                                                     Visibility="{Binding GeometryType, Converter={StaticResource GeomToVis}, ConverterParameter='Point'}"/>
+                                                            <TextBlock Text="{Binding GeometryType}" Foreground="#CBD5E1" FontSize="10.5" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+
+                                        <!-- Target Role Mapping ComboBox -->
+                                        <DataGridTemplateColumn Header="Assigned Role" Width="145">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <ComboBox Style="{StaticResource DarkComboBoxStyle}"
+                                                              ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"
+                                                              SelectedItem="{Binding Role, UpdateSourceTrigger=PropertyChanged}"
+                                                              ItemsSource="{Binding DataContext.AvailableLayerRoles, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                              Height="24" Margin="3,1" FontSize="10.5"/>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+
+                                        <!-- Live Preview: Raw CAD Text -->
+                                        <DataGridTemplateColumn Width="125">
+                                            <DataGridTemplateColumn.Header>
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Text="Live Preview" FontSize="9" FontWeight="Bold" Foreground="#38BDF8" HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="Raw CAD Text 🛈" FontSize="10.5" Foreground="#94A3B8" HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                            </DataGridTemplateColumn.Header>
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding RawCadText}" Foreground="#CBD5E1" Margin="6,0,4,0"
+                                                               VerticalAlignment="Center" FontFamily="Consolas, Segoe UI"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+
+                                        <!-- Live Preview: Decoded Arabic Text -->
+                                        <DataGridTemplateColumn Width="135">
+                                            <DataGridTemplateColumn.Header>
+                                                <StackPanel HorizontalAlignment="Center">
+                                                    <TextBlock Text="Live Preview" FontSize="9" FontWeight="Bold" Foreground="#38BDF8" HorizontalAlignment="Center"/>
+                                                    <TextBlock Text="Decoded Arabic Text" FontSize="10.5" Foreground="#94A3B8" HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                            </DataGridTemplateColumn.Header>
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding DecodedArabicText}" Foreground="#38BDF8" Margin="6,0,6,0"
+                                                               VerticalAlignment="Center" FontWeight="SemiBold"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </Border>
+
+                        <!-- Proceed to Step 2 Action Button -->
+                        <Button Content="الذهاب إلى الخطوة 2: إنشاء واستخراج البارسلات ➔ (Proceed to Step 2: Extract Parcels)" 
+                                Command="{Binding ProceedToStep2Command}" 
+                                Style="{StaticResource ActionButton}" 
+                                Height="30" Background="#0284C7" Margin="0,2,0,8" 
+                                FontWeight="Bold" FontSize="11" 
+                                ToolTip="اعتماد الطبقات المختارة والانتقال فوراً للخطوة 2 لبناء مضلعات البارسلات"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Tab 2: Parcels -->
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Image Source="pack://application:,,,/Cad2Gis.AddIn;component/Images/Step2_32.png" Width="14" Height="14" Margin="0,0,5,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <TextBlock Text="2. Extract Parcels" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
+                    <StackPanel>
+                        <!-- Tab 2 Working Data Source Selector & Summary Bar (Part B) -->
+                        <Border Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1.2" CornerRadius="6" Padding="8" Margin="0,0,0,8">
+                            <StackPanel>
+                                <TextBlock Text="مصدر بيانات بناء واستخراج البارسلات (Working Data Source):" FontWeight="Bold" Foreground="#38BDF8" FontSize="11" Margin="0,0,0,4"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <RadioButton Content="جلسة العمل من الكاد/الداتاسيت (CAD Session / Dataset) (افتراضي)" 
+                                                 IsChecked="{Binding IsSourceFromSession, Mode=TwoWay}" 
+                                                 GroupName="Tab2SourceGroup" Margin="0,0,12,0" FontWeight="Bold"/>
+                                    <RadioButton Content="أحدث تصدير يشمل تعديلاتي (Latest export)" 
+                                                 IsChecked="{Binding IsSourceFromLatestExport, Mode=TwoWay}" 
+                                                 GroupName="Tab2SourceGroup" Margin="0,0,12,0" FontWeight="SemiBold"/>
+                                    <RadioButton Content="استخدام بياناتي الخاصة (Use My Own Data)" 
+                                                 IsChecked="{Binding IsSourceFromCustom, Mode=TwoWay}" 
+                                                 GroupName="Tab2SourceGroup" FontWeight="SemiBold"/>
+                                </StackPanel>
+
+                                <!-- Working From Summary Bar -->
+                                <Border Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,0,0,4">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding WorkingFromSummary}" Foreground="#F8FAFC" FontSize="9.5" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="6,0,0,0">
+                                            <Button Content="📁 فتح المجلد" Command="{Binding OpenExportFolderCommand}" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
+                                            <Button Content="🔄 تغيير / استعراض" Command="{Binding ChangeSourceCommand}" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
+                                            <ComboBox ItemsSource="{Binding ExportHistoryItems}" SelectedItem="{Binding SelectedHistoryItem, Mode=TwoWay}"
+                                                      DisplayMemberPath="Timestamp" Width="105" Height="22" FontSize="9"
+                                                      Style="{StaticResource DarkComboBoxStyle}" ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"
+                                                      ToolTip="سجل التصديرات السابقة (Export History)"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Custom Data Source Selection Panel (Map Layer or GDB Feature Class) -->
+                                <Border Background="#101726" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,2,0,4"
+                                        Visibility="{Binding IsSourceFromCustom, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel>
+                                        <TextBlock Text="🎯 اختيار طبقة من محتويات الخريطة (Map Contents Layer):" FontSize="9.5" FontWeight="Bold" Foreground="#38BDF8" Margin="0,0,0,3"/>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <ComboBox Grid.Column="0" ItemsSource="{Binding AvailableMapPolygonLayers}" SelectedItem="{Binding SelectedMapLayer, Mode=TwoWay}"
+                                                      DisplayMemberPath="DisplayText" Height="24" FontSize="9.5"
+                                                      Style="{StaticResource DarkComboBoxStyle}" ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"/>
+                                            <Button Grid.Column="1" Content="🔄 تحديث الخريطة" Command="{Binding RefreshMapLayersCommand}" 
+                                                    Height="24" Padding="6,1" Margin="4,0,0,0" Background="#334155" Foreground="White" FontSize="9"
+                                                    ToolTip="تحديث قائمة الطبقات من محتويات الخريطة النشطة"/>
+                                        </Grid>
+
+                                        <TextBlock Text="📁 أو استعراض Feature Class من Geodatabase (.gdb) / Shapefile:" FontSize="9.5" FontWeight="Bold" Foreground="#38BDF8" Margin="0,2,0,3"/>
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox Grid.Column="0" Text="{Binding CustomSchemaDataPath, UpdateSourceTrigger=PropertyChanged}" 
+                                                     Style="{StaticResource ModernTextBox}" Height="24" FontSize="9.5" Margin="0,0,4,0"
+                                                     Tag="مسار Feature Class أو اسم الطبقة المحددة..."/>
+                                            <Button Grid.Column="1" Content="📂 استعراض Feature Class" Command="{Binding BrowseFeatureClassCommand}" 
+                                                    Height="24" Padding="8,1" Margin="0,0,3,0" Background="#0284C7" Foreground="White" FontSize="9" FontWeight="SemiBold"
+                                                    ToolTip="استعراض واختيار Feature Class مباشرة من داخل أي File Geodatabase (.gdb) عبر متصفح ArcGIS Pro الرسمي"/>
+                                            <Button Grid.Column="2" Content="📄 ملف خارجي" Command="{Binding BrowseCustomFileCommand}" 
+                                                    Height="24" Padding="6,1" Margin="0" Background="#334155" Foreground="White" FontSize="9"
+                                                    ToolTip="استعراض ملف Shapefile أو Excel خارجي"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Missing Export Path Warning -->
+                                <Border Background="#7C2D12" BorderBrush="#EA580C" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,2,0,2"
+                                        Visibility="{Binding IsWorkingFromMissing, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="{Binding WorkingFromMissingWarning}" Foreground="#FED7AA" FontSize="9.5" FontWeight="Bold" TextWrapping="Wrap"/>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Layer Geometry Mode & Lines -> Polygons & Scope Options -->
+                        <Border Background="#1E293B" BorderBrush="#2563EB" BorderThickness="1.2" CornerRadius="6" Padding="8" Margin="0,0,0,8">
+                            <StackPanel>
+                                <!-- Geometry Mode: Both (مضلعات وخطوط معاً), Polygon only, or Line only -->
+                                <TextBlock Text="نوع هندسة الطبقات المستخدمة (Layer Geometry Mode):" FontWeight="Bold" Foreground="#38BDF8" FontSize="11" Margin="0,0,0,2"/>
+                                <TextBlock Text="اختر طريقة قراءة وبناء المضلعات (Both معاً أو Polygon أو Line):" FontSize="9.5" Foreground="#94A3B8" Margin="0,0,0,4"/>
+                                <ComboBox Style="{StaticResource DarkComboBoxStyle}"
+                                          ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"
+                                          ItemsSource="{Binding GeometryModeOptions}"
+                                          SelectedItem="{Binding SelectedGeometryMode}"
+                                          Height="26" Margin="0,0,0,8"
+                                          ToolTip="Both (افتراضي): يقرأ مضلعات الكاد المعرفة ويقوم أيضاً بتحويل الخطوط المؤهلة إلى مضلعات (Line to Polygon) لدمجهما معاً. Polygon: مضلعات فقط. Line: خطوط فقط."/>
+
+                                <!-- Polygon Creation Scope -->
+                                <TextBlock Text="نطاق طبقات بناء المضلعات (Polygon Layer Scope):" FontWeight="Bold" Foreground="#38BDF8" FontSize="11" Margin="0,0,0,2"/>
+                                <TextBlock Text="اختر الطبقات التي يتم إنشاء المضلعات منها:" FontSize="9.5" Foreground="#94A3B8" Margin="0,0,0,4"/>
+
+                                <ComboBox Style="{StaticResource DarkComboBoxStyle}"
+                                          ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"
+                                          ItemsSource="{Binding PolygonLayerScopeOptions}"
+                                          SelectedItem="{Binding SelectedPolygonLayerScope}"
+                                          Height="26" Margin="0,0,0,8"/>
+
+                                <!-- Plot Text Layer Selector -->
+                                <TextBlock Text="طبقة نصوص أرقام القطع (Plot Text Layer):" FontWeight="Bold" Foreground="#38BDF8" FontSize="11" Margin="0,0,0,2"/>
+                                <TextBlock Text="اختر الطبقة المحددة لنصوص أرقام القطع (Plot ID):" FontSize="9.5" Foreground="#94A3B8" Margin="0,0,0,4"/>
+                                <ComboBox Style="{StaticResource DarkComboBoxStyle}"
+                                          ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"
+                                          ItemsSource="{Binding AvailablePlotTextLayers}"
+                                          SelectedItem="{Binding SelectedPlotTextLayer}"
+                                          Height="26" Margin="0,0,0,8"
+                                          ToolTip="يتم استخراج رقم القطعة (Plot ID) مكانياً من نصوص هذه الطبقة الواقعة داخل كل مضلع."/>
+
+                                <CheckBox IsChecked="{Binding BuildPolygonsFromLines}" Content="تحويل الخطوط إلى مضلعات (Line to Polygon)" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                
+                                <!-- خيار استخدام أداة ArcPy لتحويل الخطوط (يظهر أسفل خيار الخطوط عند اختياره) -->
+                                <Border Background="#101726" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="4" Padding="6,4" Margin="12,2,0,4"
+                                        Visibility="{Binding IsLineOptionActive, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel>
+                                        <CheckBox IsChecked="{Binding UseArcPyLineToPolygon}" 
+                                                  Content="🐍 استخدام أداة ArcPy لتحويل الخطوط (Use ArcPy Line to Polygon Tool)" 
+                                                  FontWeight="Bold" Foreground="#38BDF8" Margin="0,0,0,2"
+                                                  ToolTip="تفعيل أداة ArcPy المتخصصة (FeatureToPolygon) مع تعطيل Z/M والتحقق الطوبولوجي من اتصال الحواف والفجوات"/>
+                                        <TextBlock Text="تشغيل محرك ArcPy المتخصص لإنشاء مضلعات 2D مستوية بدقة عالية خالية من Z/M ومطابقة لمواصفات بلدي." 
+                                                   FontSize="9" Foreground="#94A3B8" TextWrapping="Wrap" Margin="18,0,0,0"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Background="#0B132B" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="4" Padding="6,4" Margin="12,4,0,2"
+                                        IsEnabled="{Binding BuildPolygonsFromLines}">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,3">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <CheckBox Grid.Column="0" IsChecked="{Binding PolygonizeGroupOfLayers}" 
+                                                      Content="تجميع الطبقات كشبكة موحدة (Unified Network)" 
+                                                      FontWeight="SemiBold" Foreground="#38BDF8"
+                                                      ToolTip="معالجة خطوط ومنحنيات كافة الطبقات المختارة معاً كطبقة واحدة لبناء المضلعات المشتركة"/>
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                <TextBlock Text="Snap (m):" Margin="0,0,3,0" VerticalAlignment="Center" FontSize="9.5" Foreground="#94A3B8"/>
+                                                <TextBox Text="{Binding SnapToleranceMeters, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}" Width="42" Height="20" VerticalContentAlignment="Center" Margin="0"/>
+                                            </StackPanel>
+                                        </Grid>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <CheckBox Grid.Column="0" IsChecked="{Binding ExtendLinesAndCurves}" 
+                                                      Content="تمديد الأطراف المفتوحة (Extend Lines &amp; Curves)" 
+                                                      Foreground="#A7F3D0" FontSize="10"
+                                                      ToolTip="تمديد الخطوط على استقامتها وتمديد المنحنيات على انحنائها الدائري (نفس المركز ونصف القطر) حتى أقرب حد لإغلاق البارسلات دون تكسير المنحنيات"/>
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                <TextBlock Text="Extend (m):" Margin="0,0,3,0" VerticalAlignment="Center" FontSize="9.5" Foreground="#94A3B8"/>
+                                                <TextBox Text="{Binding ExtendToleranceMeters, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}" Width="42" Height="20" VerticalContentAlignment="Center" Margin="0"/>
+                                            </StackPanel>
+                                        </Grid>
+                                        <TextBlock Text="تمديد أطراف المنحنيات يكون على امتداد انحناء القوس (نفس المركز ونصف القطر) والخطوط على استقامتها حتى مسافة التمديد (افتراضياً 5 سم)." 
+                                                   FontSize="8.5" Foreground="#64748B" TextWrapping="Wrap" Margin="18,2,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Stale Polygonization Warning Banner -->
+                        <Border Background="#7C2D12" BorderBrush="#EA580C" BorderThickness="1.2" CornerRadius="4" Padding="6" Margin="0,2,0,4"
+                                Visibility="{Binding IsPolygonizationStale, Converter={StaticResource BoolToVis}}">
+                            <StackPanel>
+                                <TextBlock Text="⚠️ تنبيه: نتائج بناء المضلعات أصبحت قديمة (Stale Result)" FontWeight="Bold" Foreground="#FDE047" FontSize="10.5"/>
+                                <TextBlock Text="{Binding PolygonizationStaleReason}" Foreground="#FED7AA" FontSize="9.5" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                <TextBlock Text="يرجى الضغط على 'Run Step 2' أدناه لإعادة بناء المضلعات وفقاً للتعديلات الأخيرة." Foreground="#FCD34D" FontSize="9" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Grid Margin="0,2,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" Content="▶ Run Step 2 (بناء واستخراج المضلعات 2D)" Command="{Binding BuildParcelsCommand}" Style="{StaticResource ActionButton}" Margin="0,0,4,0"/>
+                            <Button Grid.Column="1" Content="📤 تصدير (Export Step 2)" Command="{Binding ExportStep2ParcelsCommand}" Style="{StaticResource ActionButton}" Background="#0D9488" ToolTip="تصدير البارسلات المستخرجة حالياً كملف Shapefile أو داخل الجيوداتابيز"/>
+                        </Grid>
+
+                        <!-- Input Manifest & Coverage Check (Rule 2.2) -->
+                        <Expander Header="📋 بيان مدخلات وفحص تغطية التحويل (Manifest &amp; Coverage Check)" 
+                                  IsExpanded="False" Foreground="#38BDF8" FontWeight="SemiBold" Margin="0,4,0,0">
+                            <Border Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,2,0,0">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding LastPolygonizationManifest.TotalPolygonsBuilt, StringFormat='المضلعات: {0}'}" Foreground="#34D399" FontSize="9.5" FontWeight="Bold"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding LastPolygonizationManifest.TotalClosedKeptAsIs, StringFormat='مغلقة كما هي: {0}'}" Foreground="#38BDF8" FontSize="9.5"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding LastPolygonizationManifest.TotalDanglesFound, StringFormat='أطراف سائبة: {0}'}" Foreground="#F87171" FontSize="9.5"/>
+                                    </Grid>
+                                    <DataGrid ItemsSource="{Binding LastPolygonizationManifest.Layers}" AutoGenerateColumns="False" 
+                                              CanUserAddRows="False" IsReadOnly="True" MaxHeight="140"
+                                              Background="#101726" RowBackground="#101726" AlternatingRowBackground="#141D2E"
+                                              ColumnHeaderStyle="{StaticResource CadDataGridHeaderStyle}"
+                                              RowStyle="{StaticResource CadDataGridRowStyle}"
+                                              GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#1E293B"
+                                              BorderBrush="#334155" BorderThickness="1" FontSize="9.5">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="الطبقة (Layer)" Binding="{Binding LayerName}" Width="*"/>
+                                            <DataGridTextColumn Header="المقروء" Binding="{Binding EntitiesRead}" Width="45"/>
+                                            <DataGridTextColumn Header="مغلق كما هو" Binding="{Binding UsedAsIsClosed}" Width="55"/>
+                                            <DataGridTextColumn Header="دخل الشبكة" Binding="{Binding EnteredNetworkLines}" Width="55"/>
+                                            <DataGridTextColumn Header="سائبة/يتيمة" Binding="{Binding DanglesOrphansCount}" Width="55"/>
+                                            <DataGridTextColumn Header="مضلعات" Binding="{Binding PolygonsContributed}" Width="45"/>
+                                            <DataGridTextColumn Header="الحالة" Binding="{Binding Status}" Width="65"/>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </StackPanel>
+                            </Border>
+                        </Expander>
+
+                        <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,4,0,0">
+                            <StackPanel>
+                                <TextBlock Text="{Binding ParcelCountSummary}" FontWeight="SemiBold" Foreground="#38BDF8"/>
+                                <TextBlock Text="{Binding ParcelAreaSummary}" FontSize="10" Foreground="#94A3B8"/>
+                                <TextBlock Text="جميع المضلعات يتم إنشاؤها بدون قيم Z أو M (2D Planar) مطابقة لمتطلبات الوزارة." FontSize="9" Foreground="#00E699" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Tab 3: Populate Schema -->
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Image Source="pack://application:,,,/Cad2Gis.AddIn;component/Images/Step3_32.png" Width="14" Height="14" Margin="0,0,5,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <TextBlock Text="3. Populate Schema" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
+                    <StackPanel>
+                        <Border Background="#1E293B" BorderBrush="#10B981" BorderThickness="1.2" CornerRadius="6" Padding="8" Margin="0,0,0,8">
+                            <StackPanel>
+                                <TextBlock Text="3. Populate Schema &amp; Municipal Data (MOMRAH / Balady)" FontWeight="Bold" Foreground="#34D399" FontSize="11.5" Margin="0,0,0,2"/>
+                                <TextBlock Text="In this step, enter plan, city, neighbourhood metadata, join land-use table, verify areas, and store parcels into standard 2D schema." FontSize="9.5" Foreground="#94A3B8" Margin="0,0,0,6"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Step 3 Source Selector (Part B) -->
+                        <TextBlock Text="مصدر تعبئة البيانات والاسكيما (Populate Schema Source):" Style="{StaticResource HeaderLabel}" Margin="0,0,0,4"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <RadioButton Content="أحدث تصدير يشمل تعديلاتي (Latest export)" 
+                                         IsChecked="{Binding IsSourceFromLatestExport, Mode=TwoWay}" 
+                                         GroupName="SchemaSourceGroup" Margin="0,0,12,0" FontWeight="SemiBold"/>
+                            <RadioButton Content="جلسة العمل الحالية (Session data)" 
+                                         IsChecked="{Binding IsSourceFromSession, Mode=TwoWay}" 
+                                         GroupName="SchemaSourceGroup" Margin="0,0,12,0" FontWeight="SemiBold"/>
+                            <RadioButton Content="استخدام بياناتي الخاصة (Use My Own Data)" 
+                                         IsChecked="{Binding IsSourceFromCustom, Mode=TwoWay}" 
+                                         GroupName="SchemaSourceGroup" FontWeight="SemiBold"/>
+                        </StackPanel>
+
+                        <!-- Working From Summary Bar -->
+                        <Border Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,0,0,6">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding WorkingFromSummary}" Foreground="#F8FAFC" FontSize="9.5" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="6,0,0,0">
+                                    <Button Content="📁 فتح المجلد" Command="{Binding OpenExportFolderCommand}" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
+                                    <Button Content="🔄 تغيير / استعراض" Command="{Binding ChangeSourceCommand}" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Custom Data Source Selection Panel (Map Layer or GDB Feature Class) -->
+                        <Border Background="#101726" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,2,0,6"
+                                Visibility="{Binding IsSourceFromCustom, Converter={StaticResource BoolToVis}}">
+                            <StackPanel>
+                                <TextBlock Text="🎯 اختيار طبقة من محتويات الخريطة (Map Contents Layer):" FontSize="9.5" FontWeight="Bold" Foreground="#38BDF8" Margin="0,0,0,3"/>
+                                <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox Grid.Column="0" ItemsSource="{Binding AvailableMapPolygonLayers}" SelectedItem="{Binding SelectedMapLayer, Mode=TwoWay}"
+                                              DisplayMemberPath="DisplayText" Height="24" FontSize="9.5"
+                                              Style="{StaticResource DarkComboBoxStyle}" ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"/>
+                                    <Button Grid.Column="1" Content="🔄 تحديث الخريطة" Command="{Binding RefreshMapLayersCommand}" 
+                                            Height="24" Padding="6,1" Margin="4,0,0,0" Background="#334155" Foreground="White" FontSize="9"
+                                            ToolTip="تحديث قائمة الطبقات من محتويات الخريطة النشطة"/>
+                                </Grid>
+
+                                <TextBlock Text="📁 أو استعراض Feature Class من Geodatabase (.gdb) / Shapefile:" FontSize="9.5" FontWeight="Bold" Foreground="#38BDF8" Margin="0,2,0,3"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" Text="{Binding CustomSchemaDataPath, UpdateSourceTrigger=PropertyChanged}" 
+                                             Style="{StaticResource ModernTextBox}" Height="24" FontSize="9.5" Margin="0,0,4,0"
+                                             Tag="مسار Feature Class أو اسم الطبقة المحددة..."/>
+                                    <Button Grid.Column="1" Content="📂 استعراض Feature Class" Command="{Binding BrowseFeatureClassCommand}" 
+                                            Height="24" Padding="8,1" Margin="0,0,3,0" Background="#0284C7" Foreground="White" FontSize="9" FontWeight="SemiBold"
+                                            ToolTip="استعراض واختيار Feature Class مباشرة من داخل أي File Geodatabase (.gdb) عبر متصفح ArcGIS Pro الرسمي"/>
+                                    <Button Grid.Column="2" Content="📄 ملف خارجي" Command="{Binding BrowseCustomFileCommand}" 
+                                            Height="24" Padding="6,1" Margin="0" Background="#334155" Foreground="White" FontSize="9"
+                                            ToolTip="استعراض ملف Shapefile أو Excel خارجي"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Panel A: Standard Municipal Data Inputs -->
+                        <StackPanel Visibility="{Binding IsSchemaFromStandard, Converter={StaticResource BoolToVis}}">
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,3,0">
+                                    <TextBlock Text="Plan No (رقم المخطط - PLAN_NO):" Style="{StaticResource HeaderLabel}"/>
+                                    <TextBox Text="{Binding PlanNo, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}" Tag="e.g. 0000/0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="3,0,0,0">
+                                    <TextBlock Text="Neighbourhood Code (كود الحي - NEIGHBOURH):" Style="{StaticResource HeaderLabel}"/>
+                                    <TextBox Text="{Binding NeighbourhoodCode, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}" Tag="e.g. 000"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,3,0">
+                                    <TextBlock Text="Neighbourhood Name (اسم الحي - ADDRESS):" Style="{StaticResource HeaderLabel}"/>
+                                    <TextBox Text="{Binding NeighbourhoodName, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}" Tag="e.g. اسم الحي" ToolTip="اسم الحي المستخدم في تكوين نص العنوان ADDRESS في جدول القطع"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="3,0,0,0">
+                                    <TextBlock Text="Request Type (نوع الطلب - REQUEST_TY):" Style="{StaticResource HeaderLabel}"/>
+                                    <TextBox Text="{Binding RequestType, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}" Tag="e.g. نوع الطلب"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,3,0">
+                                    <TextBlock Text="City Name (اسم المدينة - ADDRESS):" Style="{StaticResource HeaderLabel}"/>
+                                    <TextBox Text="{Binding CityName, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}" Tag="e.g. الرياض أو جدة" ToolTip="اسم المدينة - يُستنتج تلقائياً من موقع القطع الرئيسية أو يُدخل يدوياً"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="3,0,0,0">
+                                    <TextBlock Text="Region Name (اسم المنطقة - ADDRESS):" Style="{StaticResource HeaderLabel}"/>
+                                    <TextBox Text="{Binding RegionName, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}" Tag="e.g. مكة المكرمة أو الرياض" ToolTip="اسم المنطقة - يُستنتج تلقائياً من موقع القطع الرئيسية أو يُدخل يدوياً"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,3,0">
+                                    <TextBlock Text="Report No (رقم التقرير - REPORT_NO):" Style="{StaticResource HeaderLabel}"/>
+                                    <TextBox Text="{Binding ReportNo, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}" Tag="e.g. رقم التقرير"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="3,0,0,0" VerticalAlignment="Bottom">
+                                    <Button Content="📍 جلب العنوان من موقع القطع" Command="{Binding DetectAddressFromMainParcelsCommand}" Style="{StaticResource ActionButton}" Height="26" Background="#334155" Margin="0,0,0,6" ToolTip="استعلام الموقع الإداري وبناء العنوان بناءً على موقع القطع الرئيسية والمدخلات"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Address Result from Main Parcels -->
+                            <Border Background="#101726" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,2,0,6">
+                                <StackPanel>
+                                    <TextBlock Text="📍 نص العنوان المعتمد (ADDRESS):" FontWeight="Bold" Foreground="#38BDF8" FontSize="10.5"/>
+                                    <TextBlock Text="{Binding AddressPreviewText}" Foreground="#F8FAFC" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- External Land-Use Table (.xlsx) -->
+                            <TextBlock Text="External Land-Use Table (جدول استخدام الأراضي .xlsx):" Style="{StaticResource HeaderLabel}"/>
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Text="{Binding LandUseExcelPath, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}" Margin="0,0,3,0" Tag="اختر ملف استخدام الأراضي الخارجي .xlsx"/>
+                                <Button Grid.Column="1" Content="..." Command="{Binding BrowseLandUseCommand}" Width="26" Height="26" Margin="0" Background="#334155" Foreground="White" BorderThickness="0"/>
+                            </Grid>
+
+                            <!-- Areas Excel Check -->
+                            <TextBlock Text="Areas Excel (جدول تدقيق المساحات .xlsx):" Style="{StaticResource HeaderLabel}"/>
+                            <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Text="{Binding AreasExcelPath, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}" Margin="0,0,3,0" Tag="اختر ملف مساحات القطع للمطابقة .xlsx"/>
+                                <Button Grid.Column="1" Content="..." Command="{Binding BrowseAreasExcelCommand}" Width="26" Height="26" Margin="0" Background="#334155" Foreground="White" BorderThickness="0"/>
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- Panel B: Use My Own Data Panel with Schema Check & Field Mapping -->
+                        <StackPanel Visibility="{Binding IsSchemaFromCustom, Converter={StaticResource BoolToVis}}">
+                            <Border Background="#1E293B" BorderBrush="#0EA5E9" BorderThickness="1.2" CornerRadius="6" Padding="8" Margin="0,0,0,8">
+                                <StackPanel>
+                                    <TextBlock Text="🎯 اختيار من طبقات الخريطة الحالية (Map Layer) أو Feature Class داخل .gdb أو Shapefile:" 
+                                               FontWeight="Bold" Foreground="#38BDF8" FontSize="11" Margin="0,0,0,4"/>
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <ComboBox Grid.Column="0" ItemsSource="{Binding AvailableMapPolygonLayers}" SelectedItem="{Binding SelectedMapLayer, Mode=TwoWay}"
+                                                  DisplayMemberPath="DisplayText" Height="26" FontSize="10" Margin="0,0,4,0"
+                                                  Style="{StaticResource DarkComboBoxStyle}" ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"/>
+                                        <Button Grid.Column="1" Content="🔄 تحديث الخريطة" Command="{Binding RefreshMapLayersCommand}" 
+                                                Height="26" Padding="8,2" Background="#334155" Foreground="White" FontSize="9.5"/>
+                                    </Grid>
+
+                                    <TextBlock Text="📁 أو مسار الملف / Feature Class:" FontWeight="Bold" Foreground="#38BDF8" FontSize="10" Margin="0,0,0,3"/>
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Grid.Column="0" Text="{Binding CustomSchemaDataPath, UpdateSourceTrigger=PropertyChanged}" 
+                                                 Style="{StaticResource ModernTextBox}" Margin="0,0,4,0" 
+                                                 Tag="اختر Feature Class أو ملف .xlsx أو .shp..."/>
+                                        <Button Grid.Column="1" Content="📂 استعراض Feature Class" Command="{Binding BrowseFeatureClassCommand}" 
+                                                Style="{StaticResource ActionButton}" Height="26" Padding="8,2" Margin="0,0,3,0" Background="#0284C7"/>
+                                        <Button Grid.Column="2" Content="📄 استعراض ملف..." Command="{Binding BrowseCustomFileCommand}" 
+                                                Style="{StaticResource ActionButton}" Height="26" Padding="8,2" Margin="0" Background="#334155"/>
+                                    </Grid>
+
+                                    <!-- Status Banner: Identical Schema vs Different Schema -->
+                                    <Border Background="{Binding SchemaStatusBgColor}" 
+                                            BorderBrush="{Binding SchemaStatusBorderColor}" 
+                                            BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,0,0,6"
+                                            Visibility="{Binding HasCustomFileLoaded, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Text="{Binding SchemaStatusMessage}" 
+                                                   Foreground="{Binding SchemaStatusTextColor}" 
+                                                   FontSize="10" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                    </Border>
+
+                                    <!-- Field Mapping Section -->
+                                    <Border Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="6"
+                                            Visibility="{Binding HasCustomFileLoaded, Converter={StaticResource BoolToVis}}">
+                                        <Expander Header="جدول مطابقة وربط الحقول (Field Mapping Table)" 
+                                                  IsExpanded="{Binding IsFieldMappingExpanded, Mode=TwoWay}" 
+                                                  Foreground="#38BDF8" FontWeight="SemiBold" FontSize="10.5">
+                                            <StackPanel Margin="0,6,0,0">
+                                                <Grid Margin="0,0,0,6">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="الحقول المتطابقة في الأسماء تم ربطها تلقائياً. يمكنك مراجعة أو تعديل أي حقل من القائمة:" 
+                                                               FontSize="9.5" Foreground="#94A3B8" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                                    <Button Grid.Column="1" Content="⚡ إعادة الربط التلقائي (Auto-Map)" 
+                                                            Command="{Binding AutoMapFieldsCommand}" 
+                                                            Style="{StaticResource ActionButton}" Height="22" Padding="8,1" FontSize="9.5" Background="#334155"/>
+                                                </Grid>
+
+                                                <DataGrid ItemsSource="{Binding FieldMappings}" 
+                                                          AutoGenerateColumns="False" 
+                                                          CanUserAddRows="False" 
+                                                          CanUserDeleteRows="False"
+                                                          MaxHeight="260" 
+                                                          ColumnHeaderStyle="{StaticResource CadDataGridHeaderStyle}"
+                                                          RowStyle="{StaticResource CadDataGridRowStyle}"
+                                                          Background="#101726" RowBackground="#101726" AlternatingRowBackground="#141D2E"
+                                                          BorderBrush="#334155" 
+                                                          BorderThickness="1"
+                                                          GridLinesVisibility="Horizontal"
+                                                          HorizontalGridLinesBrush="#334155">
+                                                    <DataGrid.Columns>
+                                                        <!-- Target Field Name -->
+                                                        <DataGridTemplateColumn Header="الحقل المعتمد (Target)" Width="115">
+                                                            <DataGridTemplateColumn.CellTemplate>
+                                                                <DataTemplate>
+                                                                    <TextBlock Text="{Binding TargetField}" FontWeight="Bold" Foreground="#38BDF8" FontSize="10.5" VerticalAlignment="Center" Margin="4,2"/>
+                                                                </DataTemplate>
+                                                            </DataGridTemplateColumn.CellTemplate>
+                                                        </DataGridTemplateColumn>
+
+                                                        <!-- Target Description -->
+                                                        <DataGridTemplateColumn Header="الوصف بالعربي" Width="170">
+                                                            <DataGridTemplateColumn.CellTemplate>
+                                                                <DataTemplate>
+                                                                    <TextBlock Text="{Binding TargetDescription}" Foreground="#CBD5E1" FontSize="9.5" 
+                                                                               VerticalAlignment="Center" TextWrapping="Wrap" Margin="4,2"/>
+                                                                </DataTemplate>
+                                                            </DataGridTemplateColumn.CellTemplate>
+                                                        </DataGridTemplateColumn>
+
+                                                        <!-- Source Field ComboBox -->
+                                                        <DataGridTemplateColumn Header="حقل البيانات الخاصة (Source Field)" Width="*">
+                                                            <DataGridTemplateColumn.CellTemplate>
+                                                                <DataTemplate>
+                                                                    <ComboBox ItemsSource="{Binding AvailableSourceFields}"
+                                                                              SelectedItem="{Binding SelectedSourceField, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                              Style="{StaticResource DarkComboBoxStyle}"
+                                                                              ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"
+                                                                              Height="24" Margin="2,1"/>
+                                                                </DataTemplate>
+                                                            </DataGridTemplateColumn.CellTemplate>
+                                                        </DataGridTemplateColumn>
+
+                                                        <!-- Status -->
+                                                        <DataGridTemplateColumn Header="الحالة" Width="90">
+                                                            <DataGridTemplateColumn.CellTemplate>
+                                                                <DataTemplate>
+                                                                    <TextBlock Text="{Binding StatusText}" Foreground="{Binding StatusColor}" 
+                                                                               FontWeight="SemiBold" FontSize="9.5" VerticalAlignment="Center" Margin="4,2"/>
+                                                                </DataTemplate>
+                                                            </DataGridTemplateColumn.CellTemplate>
+                                                        </DataGridTemplateColumn>
+                                                    </DataGrid.Columns>
+                                                </DataGrid>
+                                            </StackPanel>
+                                        </Expander>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <Grid Margin="0,4,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" Content="▶ Run Step 3 (Populate Schema)" Command="{Binding PopulateSchemaCommand}" Style="{StaticResource ActionButton}" Margin="0,0,4,0"/>
+                            <Button Grid.Column="1" Content="📤 Export Step 3 (Populated Parcels)" Command="{Binding ExportStep3PopulatedParcelsCommand}" Style="{StaticResource ActionButton}" Background="#0D9488" ToolTip="Export parcels with populated schema to GDB and Shapefile"/>
+                        </Grid>
+
+                        <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,4,0,0">
+                            <StackPanel>
+                                <TextBlock Text="السكيما المعتمدة تشمل 26 حقلاً وصفياً لـ PARCEL مطابقة تماماً لمواصفات وزارة البلديات والإسكان (MOMRAH)." FontSize="9.5" Foreground="#00E699" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Tab 4: Borders -->
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Image Source="pack://application:,,,/Cad2Gis.AddIn;component/Images/Step4_32.png" Width="14" Height="14" Margin="0,0,5,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <TextBlock Text="4. Build Borders" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
+                    <StackPanel>
+                        <TextBlock Text="4-Cardinal Boundary Model (MAIN Parcels Only)" FontWeight="SemiBold" Foreground="#F8FAFC" Margin="0,0,0,2"/>
+                        <TextBlock Text="Sub-parcels never get dimensions. Directions: 1=North (شمال), 2=East (شرق), 3=South (جنوب), 4=West (غرب)." FontSize="10" Foreground="#94A3B8" Margin="0,0,0,6"/>
+
+                        <!-- Part B: Working Source Card & Edits Banner -->
+                        <Border Background="#1E293B" BorderBrush="#0EA5E9" BorderThickness="1.2" CornerRadius="6" Padding="8" Margin="0,0,0,8">
+                            <StackPanel>
+                                <TextBlock Text="مصدر البيانات قيد المعالجة (Working Data Source):" FontWeight="Bold" Foreground="#38BDF8" FontSize="11" Margin="0,0,0,4"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <RadioButton Content="أحدث تصدير يشمل تعديلاتي (Latest export)" 
+                                                 IsChecked="{Binding IsSourceFromLatestExport, Mode=TwoWay}" 
+                                                 GroupName="Tab4SourceGroup" Margin="0,0,12,0" FontWeight="SemiBold"/>
+                                    <RadioButton Content="جلسة العمل الحالية (Session data)" 
+                                                 IsChecked="{Binding IsSourceFromSession, Mode=TwoWay}" 
+                                                 GroupName="Tab4SourceGroup" Margin="0,0,12,0" FontWeight="SemiBold"/>
+                                    <RadioButton Content="بياناتي الخاصة (User own data)" 
+                                                 IsChecked="{Binding IsSourceFromCustom, Mode=TwoWay}" 
+                                                 GroupName="Tab4SourceGroup" FontWeight="SemiBold"/>
+                                </StackPanel>
+
+                                <!-- Working From Summary Header with Actions -->
+                                <Border Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,0,0,4">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding WorkingFromSummary}" Foreground="#F8FAFC" FontSize="9.5" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="6,0,0,0">
+                                            <Button Content="📁 فتح المجلد" Command="{Binding OpenExportFolderCommand}" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
+                                            <Button Content="🔄 تغيير / استعراض" Command="{Binding ChangeSourceCommand}" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
+                                            <ComboBox ItemsSource="{Binding ExportHistoryItems}" SelectedItem="{Binding SelectedHistoryItem, Mode=TwoWay}"
+                                                      DisplayMemberPath="Timestamp" Width="105" Height="22" FontSize="9"
+                                                      Style="{StaticResource DarkComboBoxStyle}" ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"
+                                                      ToolTip="سجل التصديرات السابقة (Export History)"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Custom Data Source Selection Panel (Map Layer or GDB Feature Class) -->
+                                <Border Background="#101726" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,2,0,4"
+                                        Visibility="{Binding IsSourceFromCustom, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel>
+                                        <TextBlock Text="🎯 اختيار طبقة من محتويات الخريطة (Map Contents Layer):" FontSize="9.5" FontWeight="Bold" Foreground="#38BDF8" Margin="0,0,0,3"/>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <ComboBox Grid.Column="0" ItemsSource="{Binding AvailableMapPolygonLayers}" SelectedItem="{Binding SelectedMapLayer, Mode=TwoWay}"
+                                                      DisplayMemberPath="DisplayText" Height="24" FontSize="9.5"
+                                                      Style="{StaticResource DarkComboBoxStyle}" ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"/>
+                                            <Button Grid.Column="1" Content="🔄 تحديث الخريطة" Command="{Binding RefreshMapLayersCommand}" 
+                                                    Height="24" Padding="6,1" Margin="4,0,0,0" Background="#334155" Foreground="White" FontSize="9"
+                                                    ToolTip="تحديث قائمة الطبقات من محتويات الخريطة النشطة"/>
+                                        </Grid>
+
+                                        <TextBlock Text="📁 أو استعراض Feature Class من Geodatabase (.gdb) / Shapefile:" FontSize="9.5" FontWeight="Bold" Foreground="#38BDF8" Margin="0,2,0,3"/>
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox Grid.Column="0" Text="{Binding CustomSchemaDataPath, UpdateSourceTrigger=PropertyChanged}" 
+                                                     Style="{StaticResource ModernTextBox}" Height="24" FontSize="9.5" Margin="0,0,4,0"
+                                                     Tag="مسار Feature Class أو اسم الطبقة المحددة..."/>
+                                            <Button Grid.Column="1" Content="📂 استعراض Feature Class" Command="{Binding BrowseFeatureClassCommand}" 
+                                                    Height="24" Padding="8,1" Margin="0,0,3,0" Background="#0284C7" Foreground="White" FontSize="9" FontWeight="SemiBold"
+                                                    ToolTip="استعراض واختيار Feature Class مباشرة من داخل أي File Geodatabase (.gdb) عبر متصفح ArcGIS Pro الرسمي"/>
+                                            <Button Grid.Column="2" Content="📄 ملف خارجي" Command="{Binding BrowseCustomFileCommand}" 
+                                                    Height="24" Padding="6,1" Margin="0" Background="#334155" Foreground="White" FontSize="9"
+                                                    ToolTip="استعراض ملف Shapefile أو Excel خارجي"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Missing Export Path Warning (Section B6) -->
+                                <Border Background="#7C2D12" BorderBrush="#EA580C" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,2,0,4"
+                                        Visibility="{Binding IsWorkingFromMissing, Converter={StaticResource BoolToVis}}">
+                                    <TextBlock Text="{Binding WorkingFromMissingWarning}" Foreground="#FED7AA" FontSize="9.5" FontWeight="Bold" TextWrapping="Wrap"/>
+                                </Border>
+
+                                <!-- Edited After Export Banner (Section B4) -->
+                                <Border Background="#78350F" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,2,0,4"
+                                        Visibility="{Binding ShowEditedAfterExportBanner, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel>
+                                        <TextBlock Text="⚠️ تم تعديل بيانات التصدير يدوياً بعد التصدير (Exported data was edited after export):" 
+                                                   Foreground="#FDE68A" FontSize="9.5" FontWeight="Bold"/>
+                                        <TextBlock Text="{Binding DiffDetailsSummary}" Foreground="#FEF3C7" FontSize="9" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Frozen Metrics Discrepancy Prompt (Section B5) -->
+                                <Border Background="#1E1B4B" BorderBrush="#6366F1" BorderThickness="1.2" CornerRadius="4" Padding="6" Margin="0,2,0,4"
+                                        Visibility="{Binding ShowFrozenMetricPrompt, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding FrozenMetricDiscrepancyMessage}" Foreground="#E0E7FF" FontSize="9.5" FontWeight="Bold" TextWrapping="Wrap"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                            <Button Content="🔄 إعادة حساب وتحديث المقاييس المحفوظة" Command="{Binding RecomputeFrozenMetricsCommand}" 
+                                                    Background="#4F46E5" Foreground="White" Height="24" Padding="8,1" FontSize="9.5" Margin="0,0,6,0"/>
+                                            <Button Content="الإبقاء على المقاييس وتسجيل تحذير تدقيق" Command="{Binding KeepStoredFrozenMetricsCommand}" 
+                                                    Background="#334155" Foreground="White" Height="24" Padding="8,1" FontSize="9.5"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Border Overwrite Warning Prompt (Section B5) -->
+                                <Border Background="#831843" BorderBrush="#F43F5E" BorderThickness="1.2" CornerRadius="4" Padding="6" Margin="0,2,0,4"
+                                        Visibility="{Binding ShowBorderOverwritePrompt, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding BorderOverwriteWarningMessage}" Foreground="#FFE4E6" FontSize="9.5" FontWeight="Bold" TextWrapping="Wrap"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                            <Button Content="الإبقاء على الحدود المعدلة يدوياً" Command="{Binding KeepEditedBordersCommand}" 
+                                                    Background="#E11D48" Foreground="White" Height="24" Padding="8,1" FontSize="9.5" Margin="0,0,6,0"/>
+                                            <Button Content="إعادة التوليد وتجاوز التعديلات" Command="{Binding RegenerateBordersCommand}" 
+                                                    Background="#334155" Foreground="White" Height="24" Padding="8,1" FontSize="9.5"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Width Inference Settings (Section 3) -->
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,3,0">
+                                <TextBlock Text="Passage/Street Threshold:" Style="{StaticResource HeaderLabel}"/>
+                                <TextBox Text="{Binding PassageThresholdMeters, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Margin="3,0,0,0">
+                                <TextBlock Text="Rays Count (Median):" Style="{StaticResource HeaderLabel}"/>
+                                <TextBox Text="{Binding RayCount, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <CheckBox IsChecked="{Binding MergeChamfers}" Content="Merge corner chamfers / shotar (&lt;= 7.0m)" Margin="0,0,0,6"/>
+
+                        <!-- Corner Split Angles [A_min, A_max] and Multi-Segment Border Deviation Tolerance -->
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,2,0">
+                                <TextBlock Text="A Min (°):" Style="{StaticResource HeaderLabel}" ToolTip="الزاوية الداخلية الصغرى لنقطة كسر الركن (المقاسة من داخل القطعة - افتراضياً 10°)"/>
+                                <TextBox Text="{Binding AMinDeg, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}" ToolTip="الزاوية الداخلية الصغرى لنقطة كسر الركن (افتراضياً 10°)"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Margin="2,0,2,0">
+                                <TextBlock Text="A Max (°):" Style="{StaticResource HeaderLabel}" ToolTip="الزاوية الداخلية العظمى لنقطة كسر الركن (المقاسة من داخل القطعة - افتراضياً 160°)"/>
+                                <TextBox Text="{Binding AMaxDeg, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}" ToolTip="الزاوية الداخلية العظمى لنقطة كسر الركن (افتراضياً 160°)"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Margin="2,0,0,0">
+                                <TextBlock Text="Multi Tol (°):" Style="{StaticResource HeaderLabel}" ToolTip="تسامح تمييز الحدود المتعددة (Multi Border): يعتبر الحد Multi إذا كانت الزاوية بين قطعه تنحرف عن 180° بأكثر من هذا المعامل (افتراضياً 10°)"/>
+                                <TextBox Text="{Binding MultiSegmentAngleDeviationDeg, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}" ToolTip="معامل زاوية Multi Border (افتراضياً 10°)"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Margin="0,2,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" Content="▶ Run Step 4 (Build 4-Cardinal Borders &amp; Infer Widths)" Command="{Binding BuildBordersCommand}" Style="{StaticResource ActionButton}" Margin="0,0,4,0"/>
+                            <Button Grid.Column="1" Content="📤 تصدير (Export Step 4)" Command="{Binding ExportStep4BordersCommand}" Style="{StaticResource ActionButton}" Background="#0D9488" ToolTip="تصدير الحدود والأبعاد المولدة (2D Planar)"/>
+                        </Grid>
+
+                        <!-- Inferred Borders Review Table (Section 3 & 10) -->
+                        <TextBlock Text="Inferred Borders Review Table:" Style="{StaticResource HeaderLabel}" Margin="0,6,0,2"/>
+                        <Border Background="#101726" BorderBrush="#334155" BorderThickness="1" CornerRadius="4">
+                            <DataGrid ItemsSource="{Binding InferredBorders}" AutoGenerateColumns="False" CanUserAddRows="False" Height="140"
+                                      Background="#101726" RowBackground="#101726" AlternatingRowBackground="#141D2E"
+                                      ColumnHeaderStyle="{StaticResource CadDataGridHeaderStyle}"
+                                      RowStyle="{StaticResource CadDataGridRowStyle}"
+                                      GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#1E293B"
+                                      BorderThickness="0" FontSize="10">
+                                <DataGrid.Columns>
+                                    <DataGridCheckBoxColumn Header="Acc" Binding="{Binding IsAccepted}" Width="32"/>
+                                    <DataGridTextColumn Header="Plot" Binding="{Binding PlotId}" Width="40" IsReadOnly="True"/>
+                                    <DataGridTextColumn Header="Dir" Binding="{Binding DirectionArabic}" Width="45" IsReadOnly="True"/>
+                                    <DataGridTextColumn Header="Width(m)" Binding="{Binding MeasuredWidth, StringFormat=F1}" Width="55"/>
+                                    <DataGridTextColumn Header="Sug(m)" Binding="{Binding SuggestedWidth, StringFormat=F1}" Width="50" IsReadOnly="True"/>
+                                    <DataGridTextColumn Header="Description" Binding="{Binding Descriptio}" Width="*"/>
+                                    <DataGridTextColumn Header="Type" Binding="{Binding BorderType}" Width="45"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Border>
+
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" Content="✔ Accept All Inferred" Command="{Binding AcceptAllInferredCommand}" Height="24" Background="#16A34A" Foreground="White" BorderThickness="0" Margin="0,0,2,0"/>
+                            <TextBlock Grid.Column="1" Text="{Binding BorderCountSummary}" VerticalAlignment="Center" HorizontalAlignment="Right" FontSize="9" Foreground="#94A3B8"/>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Tab 5: Export & QA -->
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Image Source="pack://application:,,,/Cad2Gis.AddIn;component/Images/Step5_32.png" Width="14" Height="14" Margin="0,0,5,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <TextBlock Text="5. Export &amp; QA" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
+                    <StackPanel>
+                        <TextBlock Text="Deliverables &amp; Format Options" FontWeight="SemiBold" Foreground="#F8FAFC" Margin="0,0,0,4"/>
+
+                        <!-- Step 5 Working Data Source Selector (Part B) -->
+                        <Border Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1.2" CornerRadius="6" Padding="8" Margin="0,0,0,8">
+                            <StackPanel>
+                                <TextBlock Text="مصدر بيانات التصدير والتدقيق (Export Data Source):" FontWeight="Bold" Foreground="#38BDF8" FontSize="11" Margin="0,0,0,4"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <RadioButton Content="أحدث تصدير يشمل تعديلاتي (Latest export)" 
+                                                 IsChecked="{Binding IsSourceFromLatestExport, Mode=TwoWay}" 
+                                                 GroupName="Tab5SourceGroup" Margin="0,0,12,0" FontWeight="SemiBold"/>
+                                    <RadioButton Content="جلسة العمل الحالية (Session data)" 
+                                                 IsChecked="{Binding IsSourceFromSession, Mode=TwoWay}" 
+                                                 GroupName="Tab5SourceGroup" Margin="0,0,12,0" FontWeight="SemiBold"/>
+                                    <RadioButton Content="استخدام بياناتي الخاصة (Use My Own Data)" 
+                                                 IsChecked="{Binding IsSourceFromCustom, Mode=TwoWay}" 
+                                                 GroupName="Tab5SourceGroup" FontWeight="SemiBold"/>
+                                </StackPanel>
+
+                                <!-- Working From Summary Bar -->
+                                <Border Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,0,0,4">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding WorkingFromSummary}" Foreground="#F8FAFC" FontSize="9.5" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="6,0,0,0">
+                                            <Button Content="📁 فتح المجلد" Command="{Binding OpenExportFolderCommand}" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
+                                            <Button Content="🔄 تغيير / استعراض" Command="{Binding ChangeSourceCommand}" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
+                                            <ComboBox ItemsSource="{Binding ExportHistoryItems}" SelectedItem="{Binding SelectedHistoryItem, Mode=TwoWay}"
+                                                      DisplayMemberPath="Timestamp" Width="105" Height="22" FontSize="9"
+                                                      Style="{StaticResource DarkComboBoxStyle}" ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"
+                                                      ToolTip="سجل التصديرات السابقة (Export History)"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Custom Data Source Selection Panel (Map Layer or GDB Feature Class) -->
+                                <Border Background="#101726" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,2,0,4"
+                                        Visibility="{Binding IsSourceFromCustom, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel>
+                                        <TextBlock Text="🎯 اختيار طبقة من محتويات الخريطة (Map Contents Layer):" FontSize="9.5" FontWeight="Bold" Foreground="#38BDF8" Margin="0,0,0,3"/>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <ComboBox Grid.Column="0" ItemsSource="{Binding AvailableMapPolygonLayers}" SelectedItem="{Binding SelectedMapLayer, Mode=TwoWay}"
+                                                      DisplayMemberPath="DisplayText" Height="24" FontSize="9.5"
+                                                      Style="{StaticResource DarkComboBoxStyle}" ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"/>
+                                            <Button Grid.Column="1" Content="🔄 تحديث الخريطة" Command="{Binding RefreshMapLayersCommand}" 
+                                                    Height="24" Padding="6,1" Margin="4,0,0,0" Background="#334155" Foreground="White" FontSize="9"
+                                                    ToolTip="تحديث قائمة الطبقات من محتويات الخريطة النشطة"/>
+                                        </Grid>
+
+                                        <TextBlock Text="📁 أو استعراض Feature Class من Geodatabase (.gdb) / Shapefile:" FontSize="9.5" FontWeight="Bold" Foreground="#38BDF8" Margin="0,2,0,3"/>
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox Grid.Column="0" Text="{Binding CustomSchemaDataPath, UpdateSourceTrigger=PropertyChanged}" 
+                                                     Style="{StaticResource ModernTextBox}" Height="24" FontSize="9.5" Margin="0,0,4,0"
+                                                     Tag="مسار Feature Class أو اسم الطبقة المحددة..."/>
+                                            <Button Grid.Column="1" Content="📂 استعراض Feature Class" Command="{Binding BrowseFeatureClassCommand}" 
+                                                    Height="24" Padding="8,1" Margin="0,0,3,0" Background="#0284C7" Foreground="White" FontSize="9" FontWeight="SemiBold"
+                                                    ToolTip="استعراض واختيار Feature Class مباشرة من داخل أي File Geodatabase (.gdb) عبر متصفح ArcGIS Pro الرسمي"/>
+                                            <Button Grid.Column="2" Content="📄 ملف خارجي" Command="{Binding BrowseCustomFileCommand}" 
+                                                    Height="24" Padding="6,1" Margin="0" Background="#334155" Foreground="White" FontSize="9"
+                                                    ToolTip="استعراض ملف Shapefile أو Excel خارجي"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Text="Output Folder:" Style="{StaticResource HeaderLabel}"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Text="{Binding OutputDirectory, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}" Margin="0,0,3,6"/>
+                            <Button Grid.Column="1" Content="..." Command="{Binding BrowseOutputFolderCommand}" Width="26" Height="26" Margin="0,0,0,6" Background="#334155" Foreground="White" BorderThickness="0"/>
+                        </Grid>
+
+                        <!-- Export format toggles (Section 1) -->
+                        <CheckBox IsChecked="{Binding ExportFeatureClass}" Content="Export to File Geodatabase Feature Class (Frozen metrics &amp; True Curves preserved)" FontWeight="Bold" Foreground="#38BDF8" Margin="0,2,0,4"/>
+                        <CheckBox IsChecked="{Binding ExportShapefiles}" Content="Export to ESRI Shapefiles (PARCEL.shp &amp; border.shp + UTF-8 .cpg)" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                        <CheckBox IsChecked="{Binding GenerateReports}" Content="Generate QA_QC_Report.xlsx, Areas Check, Text Check &amp; Layers Used" Margin="0,0,0,6"/>
+
+                        <!-- Curve Preservation & Deliverables Options (Section 3) -->
+                        <Border Background="#0F172A" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,2,0,6">
+                            <StackPanel>
+                                <TextBlock Text="الحفاظ على المنحنيات الهندسية (Curve Preservation Options):" FontWeight="Bold" Foreground="#38BDF8" FontSize="10.5" Margin="0,0,0,3"/>
+                                <CheckBox IsChecked="{Binding AlsoKeepExactUtmGdbWithTrueCurves}" 
+                                          Content="Also keep an exact UTM copy with true curves (Feature Class in GDB)" 
+                                          FontWeight="SemiBold" Foreground="#E2E8F0" Margin="0,0,0,4"
+                                          ToolTip="يحفظ نسخة كاملة داخل قاعدة بيانات Geodatabase تحتفظ بالأقواس الحقيقية 100% دون تحويلها إلى خطوط مستقيمة."/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                    <TextBlock Text="Max Shapefile Curve Deviation (m):" VerticalAlignment="Center" FontSize="10" Foreground="#CBD5E1" Margin="0,0,6,0"/>
+                                    <TextBox Text="{Binding MaxCurveExportDeviationMeters, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource ModernTextBox}" Width="50" Height="22" VerticalContentAlignment="Center"/>
+                                    <TextBlock Text="(افتراضي: 0.001 م - تحكم دقيق بدلاً من التخشين)" FontSize="9" Foreground="#94A3B8" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                                </StackPanel>
+                                <TextBlock Text="ملاحظة: صيغة Shapefile لا تدعم الأقواس الحقيقية ويتم تحويلها بدقة متناهية (≤ 0.001م)، بينما القياسات المجمدة (AREA_SQM) والنسخة الاختيارية في GDB تحتفظ بالأقواس الحقيقية تماماً." 
+                                           FontSize="8.5" Foreground="#94A3B8" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Geometry Preservation Notification Banner -->
+                        <Border Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1.2" CornerRadius="4" Padding="6" Margin="0,0,0,6"
+                                Visibility="{Binding HasGeometryPreservationNotice, Converter={StaticResource BoolToVis}}">
+                            <StackPanel>
+                                <TextBlock Text="ℹ️ إشعار تقرير الحفاظ على الهندسة (Geometry Preservation Report):" FontWeight="Bold" Foreground="#38BDF8" FontSize="10"/>
+                                <TextBlock Text="{Binding GeometryPreservationNotice}" Foreground="#F8FAFC" FontSize="9" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Demo project guard -->
+                        <Border Background="#7C2D12" BorderBrush="#EA580C" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,0,0,6"
+                                Visibility="{Binding IsDemoBannerVisible, Converter={StaticResource BoolToVis}}">
+                            <StackPanel>
+                                <TextBlock Text="⚠️ Demo project data detected (tagged with DEMO_ prefix)." Foreground="#FFEDD5" FontSize="9.5" FontWeight="SemiBold"/>
+                                <CheckBox IsChecked="{Binding AllowDemoExportConfirmation}" Content="Explicitly confirm export of demo dataset" Foreground="#FED7AA" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Button Content="💾 Run Step 5 (Export &amp; Run Strict QA/QC Audit)" Command="{Binding ExportAndQaCommand}" Style="{StaticResource ActionButton}"/>
+
+                        <Border Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,6,0,0">
+                            <StackPanel>
+                                <TextBlock Text="{Binding QaStatusSummary}" FontWeight="Bold" Foreground="{Binding QaStatusColor}"/>
+                                <TextBlock Text="{Binding ExportStatusSummary}" FontSize="10" Foreground="#CBD5E1" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+
+        <!-- Footer / Pipeline Run & Live Action Progress Console -->
+        <Border Grid.Row="2" Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,6,0,0">
+            <StackPanel>
+                <!-- Pipeline Button & Pause Option -->
+                <Grid Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" Command="{Binding RunAllPipelineCommand}" Height="34" Background="#0D9488" Foreground="White" FontWeight="Bold" BorderThickness="0" Cursor="Hand">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Image Source="pack://application:,,,/Cad2Gis.AddIn;component/Images/RunAll_32.png" Width="18" Height="18" Margin="0,0,8,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+                            <TextBlock Text="Run All Steps Sequentially (Pipeline)" VerticalAlignment="Center" FontWeight="Bold" FontSize="11.5" Foreground="White"/>
+                        </StackPanel>
+                    </Button>
+                    <CheckBox Grid.Column="1" IsChecked="{Binding PauseAtReviewTables}" Content="Pause at review" VerticalAlignment="Center" Margin="8,0,0,0" FontSize="10" Foreground="#CBD5E1"/>
+                </Grid>
+
+                <!-- Modern Live Action Progress Console (شريط التقدم الحي لكل عملية) -->
+                <Border Background="#0F172A" BorderBrush="#24324D" BorderThickness="1" CornerRadius="5" Padding="8,6" Margin="0,2,0,0">
+                    <StackPanel>
+                        <!-- Action Title & Percentage Badge Header -->
+                        <Grid Margin="0,0,0,5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Current Action with Active Dot Indicator -->
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Ellipse Width="8" Height="8" Margin="0,0,6,0" VerticalAlignment="Center"
+                                         Fill="{Binding ProgressStatusBrush}"/>
+                                <TextBlock Text="{Binding CurrentActionText}" FontWeight="Bold" FontSize="11" Foreground="#F8FAFC" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+
+                            <!-- Percentage Badge -->
+                            <Border Grid.Column="1" Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="6,1" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding ProgressPercentageText}" FontWeight="Bold" FontSize="11" Foreground="#38BDF8"/>
+                            </Border>
+                        </Grid>
+
+                        <!-- High-Visibility Action Progress Bar -->
+                        <Grid Height="8" Margin="0,2,0,4">
+                            <!-- Background Track -->
+                            <Border Background="#0B0F19" CornerRadius="4" BorderBrush="#1E293B" BorderThickness="1"/>
+                            <!-- Active Progress Indicator -->
+                            <ProgressBar Value="{Binding ProgressValue}" Minimum="0" Maximum="100" 
+                                         IsIndeterminate="{Binding IsProgressIndeterminate}"
+                                         Height="8" 
+                                         Foreground="#0D9488"
+                                         Background="Transparent"
+                                         BorderThickness="0"/>
+                        </Grid>
+
+                        <!-- Action Details Sub-line (Item Counter & Phase) -->
+                        <Grid Margin="0,1,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding ProgressDetailsText}" FontSize="9.5" Foreground="#94A3B8" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Grid.Column="1" Text="{Binding ActivePhaseSummary}" FontSize="9" Foreground="#38BDF8" FontWeight="SemiBold" Margin="4,0,0,0"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <!-- Live Status Box (Detailed Log Message) -->
+        <Border Grid.Row="3" Background="#111827" BorderBrush="#334155" BorderThickness="1" CornerRadius="5" Padding="7,6" Margin="0,4,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="💬" FontSize="11" Margin="0,0,6,0" VerticalAlignment="Top"/>
+                <TextBlock Grid.Column="1" Text="{Binding StatusMessage}" FontSize="10" Foreground="#38BDF8" TextWrapping="Wrap" LineHeight="14"/>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>
