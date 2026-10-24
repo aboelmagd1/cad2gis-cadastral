@@ -72,7 +72,7 @@ public static class CadExtractionService
                     EntityCount = kvp.Value,
                     Role = role,
                     Category = cat,
-                    IsSelected = (cat != "Roads & References" && role != LayerRole.Ignore)
+                    IsSelected = (cat != "Ignore Layers" && cat != "Roads & References" && role != LayerRole.Ignore)
                 };
                 EnrichCadLayerMetadata(item);
                 list.Add(item);
@@ -156,7 +156,7 @@ public static class CadExtractionService
                                         DecodedArabicText = decodedText,
                                         Role = role,
                                         Category = cat,
-                                        IsSelected = (cat != "Roads & References" && role != LayerRole.Ignore)
+                                        IsSelected = (cat != "Ignore Layers" && cat != "Roads & References" && role != LayerRole.Ignore)
                                     };
                                     EnrichCadLayerMetadata(item);
                                     list.Add(item);
@@ -298,7 +298,7 @@ public static class CadExtractionService
                 EntityCount = 1,
                 Role = role,
                 Category = cat,
-                IsSelected = (cat != "Roads & References" && role != LayerRole.Ignore)
+                IsSelected = (cat != "Ignore Layers" && cat != "Roads & References" && role != LayerRole.Ignore)
             };
             EnrichCadLayerMetadata(item);
             return item;

@@ -16,6 +16,7 @@ using ArcGIS.Desktop.Framework.Contracts;
 using ArcGIS.Desktop.Framework.Threading.Tasks;
 using ArcGIS.Desktop.Mapping;
 using ArcGIS.Desktop.Catalog;
+using ArcGIS.Desktop.Core.Geoprocessing;
 using Cad2Gis.AddIn.Geometry;
 using Cad2Gis.AddIn.IO;
 using Cad2Gis.AddIn.SpatialEnrichment;
@@ -243,7 +244,7 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
                     if (targetCat == "Main Parcels") { cur.Role = LayerRole.Boundary; cur.IsSelected = true; }
                     else if (targetCat == "Sub-Parcels / Utilities") { cur.Role = LayerRole.Service; cur.IsSelected = true; }
                     else if (targetCat == "Text & Annotations") { cur.Role = LayerRole.PlotText; cur.IsSelected = true; }
-                    else if (targetCat == "Roads & References") { cur.Role = LayerRole.Ignore; cur.IsSelected = false; }
+                    else if (targetCat == "Ignore Layers" || targetCat == "Roads & References") { cur.Role = LayerRole.Ignore; cur.IsSelected = false; }
                     _filteredCadLayers?.Refresh();
                     UpdateCadTabCounts();
                 }
@@ -411,6 +412,10 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
         });
         RefreshLatestExportStatusCommand = new RelayCommand(RefreshLatestExportStatus);
 
+        BrowseOwnDataCommand = new RelayCommandParam(BrowseOwnDataAction);
+        OpenStepFolderCommand = new RelayCommandParam(OpenStepFolderAction);
+        AddStepSourceToMapCommand = new RelayCommandParam(AddStepSourceToMapAction);
+
         InitializeLatestExportState();
         _ = RefreshMapLayersAsync();
     }
@@ -430,7 +435,21 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
     public int SelectedTabIndex
     {
         get => _selectedTabIndex;
-        set => SetProperty(ref _selectedTabIndex, value);
+        set
+        {
+            if (SetProperty(ref _selectedTabIndex, value))
+            {
+                NotifyPropertyChanged(nameof(WorkingSourceMode));
+                NotifyPropertyChanged(nameof(IsSourceFromLatestExport));
+                NotifyPropertyChanged(nameof(IsSourceFromSession));
+                NotifyPropertyChanged(nameof(IsSourceFromCustom));
+                NotifyPropertyChanged(nameof(IsSchemaFromStandard));
+                NotifyPropertyChanged(nameof(IsSchemaFromCustom));
+                NotifyPropertyChanged(nameof(Stage3SourceMode));
+                UpdateWorkingFromSummary();
+                NotifyStepSourceProperties(CurrentStep);
+            }
+        }
     }
 
     private bool _isBusy;
@@ -818,61 +837,401 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
         }
     }
 
-    // Source Selector per step (Part B: Continue from Latest Export)
-    private string _workingSourceMode = "FromPreviousStep"; // Default to "FromPreviousStep" (CAD Session / Dataset)
-    public string WorkingSourceMode
+    // =========================================================================
+    // Working Data Source — Exactly Two Options per Step: PreviousStep, OwnData
+    // =========================================================================
+    private readonly Dictionary<int, StepSource> _sourceByStep = new()
     {
-        get => _workingSourceMode;
-        set
+        [2] = StepSource.PreviousStep,
+        [3] = StepSource.PreviousStep,
+        [4] = StepSource.PreviousStep,
+        [5] = StepSource.PreviousStep
+    };
+    private readonly Dictionary<int, string> _ownDataPathByStep = new();
+
+    public StepSource GetSource(int step) => _sourceByStep.TryGetValue(step, out var s) ? s : StepSource.PreviousStep;
+
+    public void SetSource(int step, StepSource s)
+    {
+        _sourceByStep[step] = s;
+        NotifyStepSourceProperties(step);
+    }
+
+    public string GetOwnDataPath(int step) => _ownDataPathByStep.TryGetValue(step, out var p) ? p : string.Empty;
+
+    public void SetOwnDataPath(int step, string path)
+    {
+        _ownDataPathByStep[step] = path;
+        NotifyStepSourceProperties(step);
+    }
+
+    public void NotifyStepSourceProperties(int step)
+    {
+        NotifyPropertyChanged($"IsStep{step}SourcePreviousStep");
+        NotifyPropertyChanged($"IsStep{step}SourceOwnData");
+        NotifyPropertyChanged($"Step{step}SourceSummary");
+        NotifyPropertyChanged($"Step{step}OwnDataPath");
+        NotifyPropertyChanged(nameof(WorkingSourceMode));
+        NotifyPropertyChanged(nameof(IsSourceFromSession));
+        NotifyPropertyChanged(nameof(IsSourceFromCustom));
+        NotifyPropertyChanged(nameof(IsSchemaFromStandard));
+        NotifyPropertyChanged(nameof(IsSchemaFromCustom));
+        NotifyPropertyChanged(nameof(WorkingFromSummary));
+    }
+
+    // Step 2 Properties
+    public bool IsStep2SourcePreviousStep
+    {
+        get => GetSource(2) == StepSource.PreviousStep;
+        set { if (value) SetSource(2, StepSource.PreviousStep); }
+    }
+    public bool IsStep2SourceOwnData
+    {
+        get => GetSource(2) == StepSource.OwnData;
+        set { if (value) SetSource(2, StepSource.OwnData); }
+    }
+    public string Step2OwnDataPath
+    {
+        get => GetOwnDataPath(2);
+        set => SetOwnDataPath(2, value);
+    }
+    public string Step2SourceSummary => GetStepSourceSummary(2);
+
+    // Step 3 Properties
+    public bool IsStep3SourcePreviousStep
+    {
+        get => GetSource(3) == StepSource.PreviousStep;
+        set { if (value) SetSource(3, StepSource.PreviousStep); }
+    }
+    public bool IsStep3SourceOwnData
+    {
+        get => GetSource(3) == StepSource.OwnData;
+        set { if (value) SetSource(3, StepSource.OwnData); }
+    }
+    public string Step3OwnDataPath
+    {
+        get => GetOwnDataPath(3);
+        set => SetOwnDataPath(3, value);
+    }
+    public string Step3SourceSummary => GetStepSourceSummary(3);
+
+    // Step 4 Properties
+    public bool IsStep4SourcePreviousStep
+    {
+        get => GetSource(4) == StepSource.PreviousStep;
+        set { if (value) SetSource(4, StepSource.PreviousStep); }
+    }
+    public bool IsStep4SourceOwnData
+    {
+        get => GetSource(4) == StepSource.OwnData;
+        set { if (value) SetSource(4, StepSource.OwnData); }
+    }
+    public string Step4OwnDataPath
+    {
+        get => GetOwnDataPath(4);
+        set => SetOwnDataPath(4, value);
+    }
+    public string Step4SourceSummary => GetStepSourceSummary(4);
+
+    // Step 5 Properties
+    public bool IsStep5SourcePreviousStep
+    {
+        get => GetSource(5) == StepSource.PreviousStep;
+        set { if (value) SetSource(5, StepSource.PreviousStep); }
+    }
+    public bool IsStep5SourceOwnData
+    {
+        get => GetSource(5) == StepSource.OwnData;
+        set { if (value) SetSource(5, StepSource.OwnData); }
+    }
+    public string Step5OwnDataPath
+    {
+        get => GetOwnDataPath(5);
+        set => SetOwnDataPath(5, value);
+    }
+    public string Step5SourceSummary => GetStepSourceSummary(5);
+
+    public string GetStepSourceSummary(int step)
+    {
+        var source = GetSource(step);
+        if (source == StepSource.OwnData)
         {
-            if (SetProperty(ref _workingSourceMode, value))
+            string path = GetOwnDataPath(step);
+            if (string.IsNullOrWhiteSpace(path))
             {
-                NotifyPropertyChanged(nameof(IsSourceFromLatestExport));
-                NotifyPropertyChanged(nameof(IsSourceFromSession));
-                NotifyPropertyChanged(nameof(IsSourceFromCustom));
-                NotifyPropertyChanged(nameof(IsSchemaFromStandard));
-                NotifyPropertyChanged(nameof(IsSchemaFromCustom));
-                NotifyPropertyChanged(nameof(Stage3SourceMode));
-                UpdateWorkingFromSummary();
+                return "المصدر: بياناتي الخاصة (لم يتم تحديد مسار الملف بعد — انقر فوق 'استعراض')";
+            }
+            if (File.Exists(path) || Directory.Exists(path) || GdbFeatureClassService.ItemExists(path))
+            {
+                return $"المصدر: بياناتي الخاصة ({path})";
+            }
+            return $"⚠️ ملف البيانات الخاصة غير موجود: {path}";
+        }
+        else
+        {
+            int priorStep = step - 1;
+            var output = PipelineStateManager.LoadStepOutput(_helperManager.PipelineStateFile, priorStep);
+            if (output == null || string.IsNullOrWhiteSpace(output.Path) || (!File.Exists(output.Path) && !Directory.Exists(output.Path) && !GdbFeatureClassService.ItemExists(output.Path)))
+            {
+                return $"⚠️ مخرجات الخطوة {priorStep} غير متوفرة بعد — يرجى تشغيل الخطوة {priorStep} أولاً أو اختيار 'بياناتي الخاصة'";
+            }
+
+            bool isEdited = PipelineStateManager.IsEditedSinceWritten(_helperManager.PipelineStateFile, priorStep, out var details);
+            string editStatus = isEdited ? $"نعم ({details})" : "لا";
+            return $"المصدر: مخرجات الخطوة {priorStep} المعتمدة ({output.Path}) — {output.FeatureCount:N0} معلماً — تم الكتابة: {output.WrittenAt:HH:mm:ss} — معدل منذ الكتابة: {editStatus}";
+        }
+    }
+
+    public string ResolveOwnDataOrFail(int step)
+    {
+        string path = GetOwnDataPath(step);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            string msg = $"يرجى تحديد مسار الملف لبياناتك الخاصة بالخطوة {step}. انقر فوق 'استعراض' لاختيار الطبقة أو الملف.";
+            StatusMessage = msg;
+            ArcGIS.Desktop.Framework.Dialogs.MessageBox.Show(msg, $"بيانات خاصة - الخطوة {step}", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+            throw new InvalidOperationException(msg);
+        }
+
+        if (!File.Exists(path) && !Directory.Exists(path) && !GdbFeatureClassService.ItemExists(path))
+        {
+            string msg = $"ملف البيانات الخاصة للخطوة {step} غير موجود في المسار: {path}";
+            StatusMessage = msg;
+            ArcGIS.Desktop.Framework.Dialogs.MessageBox.Show(msg, $"بيانات خاصة - الخطوة {step}", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+            throw new FileNotFoundException(msg, path);
+        }
+
+        return path;
+    }
+
+    public void ValidateInputOrFail(string path, GeometryType? expectedGeom = null)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new InvalidOperationException("مسار البيانات المدخلة فارغ.");
+
+        if (!File.Exists(path) && !Directory.Exists(path) && !GdbFeatureClassService.ItemExists(path))
+            throw new FileNotFoundException($"مصدر البيانات غير موجود: {path}", path);
+
+        if (expectedGeom == GeometryType.Polygon)
+        {
+            var (ok, reason) = GdbFeatureClassService.VerifyPolygonFeatureClass(path, 0, SelectedUtmZone);
+            if (!ok)
+            {
+                throw new InvalidOperationException($"البيانات المدخلة غير صالحة كمضلعات: {reason}");
             }
         }
+        else if (expectedGeom == GeometryType.Polyline)
+        {
+            var (ok, reason) = GdbFeatureClassService.VerifyPolylineFeatureClass(path, 0, SelectedUtmZone);
+            if (!ok)
+            {
+                throw new InvalidOperationException($"البيانات المدخلة غير صالحة كخطوط: {reason}");
+            }
+        }
+    }
+
+    public async Task ValidateInputOrFailAsync(string path, GeometryType? expectedGeom = null)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new InvalidOperationException("مسار البيانات المدخلة فارغ.");
+
+        bool exists = File.Exists(path) || Directory.Exists(path) || await GdbFeatureClassService.ItemExistsAsync(path);
+        if (!exists)
+            throw new FileNotFoundException($"مصدر البيانات غير موجود: {path}", path);
+
+        if (expectedGeom == GeometryType.Polygon)
+        {
+            var (ok, reason) = await GdbFeatureClassService.VerifyPolygonFeatureClassAsync(path, 0, SelectedUtmZone);
+            if (!ok)
+            {
+                throw new InvalidOperationException($"البيانات المدخلة غير صالحة كمضلعات: {reason}");
+            }
+        }
+        else if (expectedGeom == GeometryType.Polyline)
+        {
+            var (ok, reason) = await GdbFeatureClassService.VerifyPolylineFeatureClassAsync(path, 0, SelectedUtmZone);
+            if (!ok)
+            {
+                throw new InvalidOperationException($"البيانات المدخلة غير صالحة كخطوط: {reason}");
+            }
+        }
+    }
+
+    private int ParseStepParam(object? param)
+    {
+        if (param is int i && i >= 1 && i <= 5) return i;
+        if (param is string s && int.TryParse(s, out var parsed) && parsed >= 1 && parsed <= 5) return parsed;
+        return CurrentStep;
+    }
+
+    private void BrowseOwnDataAction(object? param)
+    {
+        int step = ParseStepParam(param);
+        var openDialog = new ArcGIS.Desktop.Catalog.OpenItemDialog
+        {
+            Title = $"اختر بياناتك الخاصة للخطوة {step}",
+            InitialLocation = OutputDirectory,
+            MultiSelect = false,
+            Filter = "All Supported (*.shp;*.dxf;*.dwg;*.gdb)|*.shp;*.dxf;*.dwg;*.gdb|Shapefiles (*.shp)|*.shp|CAD (*.dwg;*.dxf)|*.dwg;*.dxf|All Files (*.*)|*.*"
+        };
+
+        if (openDialog.ShowDialog() == true && openDialog.Items.Any())
+        {
+            string selectedPath = openDialog.Items.First().Path;
+            SetOwnDataPath(step, selectedPath);
+            SetSource(step, StepSource.OwnData);
+            StatusMessage = $"تم تعيين بياناتك الخاصة للخطوة {step}: {selectedPath}";
+        }
+    }
+
+    private void OpenStepFolderAction(object? param)
+    {
+        int step = ParseStepParam(param);
+        string? targetPath = null;
+        if (GetSource(step) == StepSource.OwnData)
+        {
+            targetPath = GetOwnDataPath(step);
+        }
+        else
+        {
+            targetPath = PipelineStateManager.LoadStepOutput(_helperManager.PipelineStateFile, step - 1)?.Path;
+        }
+
+        string targetDir = OutputDirectory;
+        if (!string.IsNullOrWhiteSpace(targetPath))
+        {
+            if (Directory.Exists(targetPath) && !targetPath.EndsWith(".gdb", StringComparison.OrdinalIgnoreCase))
+                targetDir = targetPath;
+            else
+            {
+                string? pDir = Path.GetDirectoryName(targetPath);
+                if (!string.IsNullOrWhiteSpace(pDir) && pDir.EndsWith(".gdb", StringComparison.OrdinalIgnoreCase))
+                    pDir = Path.GetDirectoryName(pDir);
+                if (!string.IsNullOrWhiteSpace(pDir) && Directory.Exists(pDir))
+                    targetDir = pDir;
+            }
+        }
+
+        if (Directory.Exists(targetDir))
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = targetDir, UseShellExecute = true });
+            }
+            catch { }
+        }
+    }
+
+    private async void AddStepSourceToMapAction(object? param)
+    {
+        int step = ParseStepParam(param);
+        string? targetPath = null;
+        if (GetSource(step) == StepSource.OwnData)
+        {
+            targetPath = GetOwnDataPath(step);
+        }
+        else
+        {
+            targetPath = PipelineStateManager.LoadStepOutput(_helperManager.PipelineStateFile, step - 1)?.Path;
+        }
+
+        if (string.IsNullOrWhiteSpace(targetPath) || (!File.Exists(targetPath) && !Directory.Exists(targetPath) && !GdbFeatureClassService.ItemExists(targetPath)))
+        {
+            ArcGIS.Desktop.Framework.Dialogs.MessageBox.Show(
+                $"مصدر الخطوة {step} غير متوفر بعد على القرص لإضافته إلى الخريطة.",
+                "معاينة المصدر في الخريطة",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Information);
+            return;
+        }
+
+        try
+        {
+            await QueuedTask.Run(() =>
+            {
+                var map = MapView.Active?.Map;
+                if (map != null)
+                {
+                    if (targetPath.Contains(".gdb", StringComparison.OrdinalIgnoreCase))
+                    {
+                        int gdbIdx = targetPath.IndexOf(".gdb", StringComparison.OrdinalIgnoreCase);
+                        string gdbPath = targetPath.Substring(0, gdbIdx + 4);
+                        string itemName = targetPath.Substring(gdbIdx + 4).TrimStart('\\', '/');
+                        if (GdbFeatureClassService.DatasetExists(gdbPath, itemName))
+                        {
+                            GdbFeatureClassService.AddCadDatasetToMap(map, gdbPath, itemName);
+                        }
+                        else
+                        {
+                            GdbFeatureClassService.AddOrRefreshMapLayer(map, gdbPath, itemName, $"{itemName} (Step {step} Source)");
+                        }
+                    }
+                    else
+                    {
+                        LayerFactory.Instance.CreateLayer(new Uri(targetPath), map);
+                    }
+                }
+            });
+            StatusMessage = $"تمت إضافة مصدر الخطوة {step} إلى الخريطة للمعاينة والتعديل.";
+        }
+        catch (Exception ex)
+        {
+            ReportError($"فشل إضافة المصدر إلى الخريطة: {ex.Message}", "إضافة طبقة إلى الخريطة");
+        }
+    }
+
+    public void RegisterStepOutput(int step, string path, int count, int wkid)
+    {
+        try
+        {
+            var record = new StepOutputRecord
+            {
+                Step = step,
+                Path = path,
+                FeatureCount = count,
+                Wkid = wkid,
+                WrittenAt = DateTime.Now,
+                ContentStamp = PipelineStateManager.ComputeContentStamp(path),
+                RunId = Guid.NewGuid().ToString("N")
+            };
+            PipelineStateManager.TrySaveStepOutput(_helperManager.PipelineStateFile, record, out var err);
+            if (!string.IsNullOrEmpty(err))
+            {
+                System.Diagnostics.Debug.WriteLine($"[PipelineStateManager] Failed to persist Step {step} output: {err}");
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[PipelineStateManager] Exception saving Step {step} output: {ex.Message}");
+        }
+
+        NotifyStepSourceProperties(step + 1);
+    }
+
+    public int CurrentStep => SelectedTabIndex == 0 ? 2 : (SelectedTabIndex + 1);
+
+    public string WorkingSourceMode
+    {
+        get => GetSource(CurrentStep) == StepSource.OwnData ? "UserOwnData" : "FromPreviousStep";
+        set => SetSource(CurrentStep, value == "UserOwnData" ? StepSource.OwnData : StepSource.PreviousStep);
     }
 
     public bool IsSourceFromLatestExport
     {
-        get => WorkingSourceMode == "LatestExport";
-        set
-        {
-            if (value)
-            {
-                WorkingSourceMode = "LatestExport";
-                RefreshLatestExportStatus();
-            }
-        }
+        get => false;
+        set { /* Inert: Replaced by PreviousStep / OwnData */ }
     }
 
     public bool IsSourceFromSession
     {
-        get => WorkingSourceMode == "FromPreviousStep";
-        set
-        {
-            if (value)
-            {
-                WorkingSourceMode = "FromPreviousStep";
-            }
-        }
+        get => GetSource(CurrentStep) == StepSource.PreviousStep;
+        set { if (value) SetSource(CurrentStep, StepSource.PreviousStep); }
     }
 
     public bool IsSourceFromCustom
     {
-        get => WorkingSourceMode == "UserOwnData";
-        set
-        {
-            if (value)
-            {
-                WorkingSourceMode = "UserOwnData";
-            }
-        }
+        get => GetSource(CurrentStep) == StepSource.OwnData;
+        set { if (value) SetSource(CurrentStep, StepSource.OwnData); }
     }
 
     public string Stage3SourceMode
@@ -883,26 +1242,28 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
 
     public bool IsSchemaFromStandard
     {
-        get => WorkingSourceMode != "UserOwnData";
-        set
-        {
-            if (value)
-            {
-                WorkingSourceMode = HasLatestExport ? "LatestExport" : "FromPreviousStep";
-            }
-        }
+        get => GetSource(3) == StepSource.PreviousStep;
+        set { if (value) SetSource(3, StepSource.PreviousStep); }
     }
 
     public bool IsSchemaFromCustom
     {
-        get => WorkingSourceMode == "UserOwnData";
-        set
-        {
-            if (value)
-            {
-                WorkingSourceMode = "UserOwnData";
-            }
-        }
+        get => GetSource(3) == StepSource.OwnData;
+        set { if (value) SetSource(3, StepSource.OwnData); }
+    }
+
+    private bool _showLatestExportBanner;
+    public bool ShowLatestExportBanner
+    {
+        get => _showLatestExportBanner;
+        set => SetProperty(ref _showLatestExportBanner, value);
+    }
+
+    private string _latestExportBannerMessage = string.Empty;
+    public string LatestExportBannerMessage
+    {
+        get => _latestExportBannerMessage;
+        set => SetProperty(ref _latestExportBannerMessage, value);
     }
 
     // Part B Observable Properties
@@ -1588,6 +1949,7 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
                 NotifyPropertyChanged(nameof(IsMainParcelsTabSelected));
                 NotifyPropertyChanged(nameof(IsSubParcelsTabSelected));
                 NotifyPropertyChanged(nameof(IsTextAnnotationsTabSelected));
+                NotifyPropertyChanged(nameof(IsIgnoreTabSelected));
                 NotifyPropertyChanged(nameof(IsRoadsReferencesTabSelected));
                 NotifyPropertyChanged(nameof(IsAllSelectedInCurrentTab));
                 NotifyPropertyChanged(nameof(SelectedLayersStatus));
@@ -1598,22 +1960,26 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
     public bool IsMainParcelsTabSelected => SelectedCadTab == "Main Parcels";
     public bool IsSubParcelsTabSelected => SelectedCadTab == "Sub-Parcels / Utilities";
     public bool IsTextAnnotationsTabSelected => SelectedCadTab == "Text & Annotations";
-    public bool IsRoadsReferencesTabSelected => SelectedCadTab == "Roads & References";
+    public bool IsIgnoreTabSelected => SelectedCadTab == "Ignore Layers" || SelectedCadTab == "Roads & References";
+    public bool IsRoadsReferencesTabSelected => IsIgnoreTabSelected;
 
     public int MainParcelsCount => CadLayers.Count(c => c.Category == "Main Parcels");
     public int SubParcelsCount => CadLayers.Count(c => c.Category == "Sub-Parcels / Utilities");
     public int TextAnnotationsCount => CadLayers.Count(c => c.Category == "Text & Annotations");
-    public int RoadsReferencesCount => CadLayers.Count(c => c.Category == "Roads & References");
+    public int IgnoreCount => CadLayers.Count(c => c.Category == "Ignore Layers" || c.Category == "Roads & References");
+    public int RoadsReferencesCount => IgnoreCount;
 
     public int SelectedMainParcelsCount => CadLayers.Count(c => c.Category == "Main Parcels" && c.IsSelected);
     public int SelectedSubParcelsCount => CadLayers.Count(c => c.Category == "Sub-Parcels / Utilities" && c.IsSelected);
     public int SelectedTextAnnotationsCount => CadLayers.Count(c => c.Category == "Text & Annotations" && c.IsSelected);
-    public int SelectedRoadsReferencesCount => CadLayers.Count(c => c.Category == "Roads & References" && c.IsSelected);
+    public int SelectedIgnoreCount => CadLayers.Count(c => (c.Category == "Ignore Layers" || c.Category == "Roads & References") && c.IsSelected);
+    public int SelectedRoadsReferencesCount => SelectedIgnoreCount;
 
     public string MainParcelsBadge => MainParcelsCount > 0 ? $" ({SelectedMainParcelsCount}/{MainParcelsCount})" : " (0)";
     public string SubParcelsBadge => SubParcelsCount > 0 ? $" ({SelectedSubParcelsCount}/{SubParcelsCount})" : " (0)";
     public string TextAnnotationsBadge => TextAnnotationsCount > 0 ? $" ({SelectedTextAnnotationsCount}/{TextAnnotationsCount})" : " (0)";
-    public string RoadsReferencesBadge => RoadsReferencesCount > 0 ? $" ({SelectedRoadsReferencesCount}/{RoadsReferencesCount})" : " (0)";
+    public string IgnoreBadge => IgnoreCount > 0 ? $" ({SelectedIgnoreCount}/{IgnoreCount})" : " (0)";
+    public string RoadsReferencesBadge => IgnoreBadge;
 
     public string SelectedLayersStatus
     {
@@ -1658,15 +2024,20 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
         NotifyPropertyChanged(nameof(MainParcelsCount));
         NotifyPropertyChanged(nameof(SubParcelsCount));
         NotifyPropertyChanged(nameof(TextAnnotationsCount));
+        NotifyPropertyChanged(nameof(IgnoreCount));
         NotifyPropertyChanged(nameof(RoadsReferencesCount));
         NotifyPropertyChanged(nameof(SelectedMainParcelsCount));
         NotifyPropertyChanged(nameof(SelectedSubParcelsCount));
         NotifyPropertyChanged(nameof(SelectedTextAnnotationsCount));
+        NotifyPropertyChanged(nameof(SelectedIgnoreCount));
         NotifyPropertyChanged(nameof(SelectedRoadsReferencesCount));
         NotifyPropertyChanged(nameof(MainParcelsBadge));
         NotifyPropertyChanged(nameof(SubParcelsBadge));
         NotifyPropertyChanged(nameof(TextAnnotationsBadge));
+        NotifyPropertyChanged(nameof(IgnoreBadge));
         NotifyPropertyChanged(nameof(RoadsReferencesBadge));
+        NotifyPropertyChanged(nameof(IsIgnoreTabSelected));
+        NotifyPropertyChanged(nameof(IsRoadsReferencesTabSelected));
         NotifyPropertyChanged(nameof(IsAllSelectedInCurrentTab));
         NotifyPropertyChanged(nameof(SelectedLayersStatus));
         UpdatePlotTextLayersList();
@@ -1794,6 +2165,10 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
     public ICommand BrowseFeatureClassCommand { get; }
     public ICommand RefreshMapLayersCommand { get; }
     public ICommand BrowseCustomFileCommand { get; }
+
+    public ICommand BrowseOwnDataCommand { get; }
+    public ICommand OpenStepFolderCommand { get; }
+    public ICommand AddStepSourceToMapCommand { get; }
 
     #endregion
 
@@ -1927,7 +2302,7 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
                                 var cat = existing?.Category ?? CadLayerInfo.DetermineCategory(role, kvp.Key);
 
                                 string gt = cadGeoms.TryGetValue(kvp.Key, out string? g) ? g : (existing?.GeometryType ?? "Polygon");
-                                if (gt.Equals("Polygon", StringComparison.OrdinalIgnoreCase) && role == LayerRole.Ignore && cat == "Roads & References")
+                                if (gt.Equals("Polygon", StringComparison.OrdinalIgnoreCase) && role == LayerRole.Ignore && (cat == "Ignore Layers" || cat == "Roads & References"))
                                 {
                                     role = LayerRole.Boundary;
                                     cat = "Main Parcels";
@@ -1940,7 +2315,7 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
                                     GeometryType = gt,
                                     Role = role,
                                     Category = cat,
-                                    IsSelected = (cat != "Roads & References" && role != LayerRole.Ignore)
+                                    IsSelected = (cat != "Ignore Layers" && cat != "Roads & References" && role != LayerRole.Ignore)
                                 };
 
                                 if (cadTexts.TryGetValue(kvp.Key, out string? rawTxt))
@@ -2035,6 +2410,13 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
                 WorkingSourceMode = "FromPreviousStep";
                 ResetProgress($"اكتملت الخطوة 1: تم قراءة {CadLayers.Count} طبقة فعلية من '{Path.GetFileName(CadDrawingPath)}'.", "اكتمل فحص الطبقات");
             }
+
+            string step1Output = Path.Combine(GdbPath, "Cad_Dataset");
+            if (!Directory.Exists(step1Output) && !GdbFeatureClassService.DatasetExists(GdbPath, "Cad_Dataset") && !string.IsNullOrWhiteSpace(CadDrawingPath) && File.Exists(CadDrawingPath))
+            {
+                step1Output = CadDrawingPath;
+            }
+            RegisterStepOutput(1, step1Output, CadLayers.Count, SelectedUtmZone);
         }
         catch (Exception ex)
         {
@@ -2055,6 +2437,20 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
         {
             // Save any pending user map edits in ArcGIS Pro to ensure they are picked up in the GDB
             await GdbFeatureClassService.SaveMapEditsAsync();
+            // Step 2 Input Verification (Previous Step 1 or Own Data)
+            string step2Input;
+            if (GetSource(2) == StepSource.OwnData)
+            {
+                step2Input = ResolveOwnDataOrFail(2);
+                await ValidateInputOrFailAsync(step2Input);
+            }
+            else
+            {
+                step2Input = PipelineStateManager.GetVerifiedOutputOrFail(_helperManager.PipelineStateFile, step: 1).Path;
+                await ValidateInputOrFailAsync(step2Input);
+            }
+            System.Diagnostics.Debug.WriteLine($"[Step2] option={GetSource(2)} source={step2Input}");
+
             // Step 2: Read Dataset from Step 1 without re-converting CAD files or recreating dataset unnecessarily
             bool datasetExists = await GdbFeatureClassService.DatasetExistsAsync(GdbPath, "Cad_Dataset");
             if (datasetExists)
@@ -2066,14 +2462,7 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
                 ReportProgress(15, "الخطوة 2: تحويل الكاد إلى داتاسيت", $"تحويل الكاد بالنظام الإحداثي EPSG:{SelectedUtmZone}...", phase: "المرحلة 2 من 5");
                 try
                 {
-                    bool ok = await GdbFeatureClassService.ConvertCadToDatasetAsync(CadDrawingPath, GdbPath, "Cad_Dataset", SelectedUtmZone);
-                    if (ok)
-                    {
-                        await QueuedTask.Run(() =>
-                        {
-                            GdbFeatureClassService.AddCadDatasetToMap(MapView.Active?.Map, GdbPath, "Cad_Dataset");
-                        });
-                    }
+                    await GdbFeatureClassService.ConvertCadToDatasetAsync(CadDrawingPath, GdbPath, "Cad_Dataset", SelectedUtmZone);
                 }
                 catch (Exception ex)
                 {
@@ -2133,7 +2522,7 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
                             {
                                 var role = CadExtractionService.InferRoleFromName(name);
                                 var cat = CadLayerInfo.DetermineCategory(role, name);
-                                if (cat == "Roads & References")
+                                if (cat == "Ignore Layers" || cat == "Roads & References")
                                 {
                                     role = LayerRole.Ignore;
                                 }
@@ -2181,40 +2570,94 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
 
             // B. Build Polygons from Lines (automatically active on Line or Both)
             // Run native ArcGIS Geoprocessing FeatureToPolygon outside QueuedTask to prevent deadlocks!
-            var constructedParcels = new List<(Polygon Polygon, string LayerName)>();
+            var constructedParcelsWithClass = new List<(Polygon Polygon, ParcelClass Class, string GroupName)>();
+            bool isLineOnlyMode = !LayerGeometryModeService.ShouldIngestPolygons(SelectedGeometryMode);
             FeatureToPolygonReport? f2pReport = null;
-            bool shouldPolyLines = (isLineMode || _parcels.Count == 0)
-                                   && (WorkingSourceMode != "UserOwnData" || !File.Exists(SourceParcelShpPath))
-                                   && (await GdbFeatureClassService.DatasetExistsAsync(GdbPath, "Cad_Dataset"));
 
-            if (shouldPolyLines && eligibleLayerNames.Count > 0)
+            if (isLineMode)
             {
-                if (UseArcPyLineToPolygon)
+                if (!await GdbFeatureClassService.DatasetExistsAsync(GdbPath, "Cad_Dataset"))
                 {
-                    ReportProgress(65, "الخطوة 2: تحويل الخطوط عبر أداة ArcPy", $"تشغيل أداة ArcPy Line to Polygon للطبقات المحددة ({eligibleLayerNames.Count} طبقة)...", phase: "المرحلة 2 من 5");
-                    f2pReport = await GdbFeatureClassService.RunArcPyLineToPolygonToolAsync(
+                    string err = "قاعدة البيانات الجغرافية لا تحتوي على داتاسيت 'Cad_Dataset' المطلوبة لتحويل الخطوط. يرجى تشغيل الخطوة 1 أولاً.";
+                    StatusMessage = err;
+                    ReportError(err, "خطأ في مصدر الخطوة 2");
+                    ResetProgress(err, "توقف تحويل الخطوط");
+                    return;
+                }
+
+                // Section 6: Class assignment (MAIN / SUB) without losing the layer name
+                // Run once per class group: Main Parcels tab layers, then Sub-Parcels tab layers.
+                var mainLayers = CadLayers.Where(l => (l.Category == "Main Parcels" || l.Role == LayerRole.Boundary) && l.IsSelected)
+                    .Select(l => l.LayerName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+                var subLayers = CadLayers.Where(l => (l.Category == "Sub-Parcels / Utilities" || l.Role == LayerRole.Street) && l.IsSelected)
+                    .Select(l => l.LayerName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+                var otherSelected = CadLayers.Where(l => l.IsSelected && l.Category != "Ignore Layers" && l.Category != "Roads & References" && l.Category != "Text & Annotations"
+                    && !mainLayers.Contains(l.LayerName, StringComparer.OrdinalIgnoreCase)
+                    && !subLayers.Contains(l.LayerName, StringComparer.OrdinalIgnoreCase))
+                    .Select(l => l.LayerName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+                if (mainLayers.Count == 0 && subLayers.Count == 0 && otherSelected.Count > 0)
+                {
+                    mainLayers.AddRange(otherSelected);
+                }
+
+                var groupRuns = new List<(string GroupName, string OutFcName, ParcelClass Class, List<string> Layers)>();
+                if (mainLayers.Count > 0)
+                    groupRuns.Add(("Main Parcels", "temp_f2p_main", ParcelClass.Main, mainLayers));
+                if (subLayers.Count > 0)
+                    groupRuns.Add(("Sub-Parcels", "temp_f2p_sub", ParcelClass.Sub, subLayers));
+
+                if (groupRuns.Count == 0)
+                {
+                    string err = "الخطوة 2: لم يتم اختيار أي طبقات مؤهلة في الخطوة 1 لبناء المضلعات من الخطوط.";
+                    StatusMessage = err;
+                    ReportError(err, "خطأ في اختيار الطبقات");
+                    ResetProgress(err, "توقف تحويل الخطوط");
+                    return;
+                }
+
+                foreach (var grp in groupRuns)
+                {
+                    ReportProgress(65, $"الخطوة 2: تحويل خطوط {grp.GroupName} إلى مضلعات (Feature to Polygon)", $"تشغيل أداة Feature to Polygon لمجموعة {grp.GroupName} ({grp.Layers.Count} طبقة)...", phase: "المرحلة 2 من 5");
+
+                    var rep = await GdbFeatureClassService.RunFeatureToPolygonReportAsync(
                         GdbPath,
                         "Cad_Dataset",
-                        eligibleLayerNames,
+                        grp.Layers,
                         SnapToleranceMeters,
                         SelectedUtmZone,
-                        _helperManager.HelperFilesRoot);
-                }
-                else
-                {
-                    ReportProgress(65, "الخطوة 2: تحويل الخطوط إلى مضلعات (Feature to Polygon)", $"تشغيل أداة Feature to Polygon للطبقات المحددة ({eligibleLayerNames.Count} طبقة)...", phase: "المرحلة 2 من 5");
-                    f2pReport = await GdbFeatureClassService.RunFeatureToPolygonReportAsync(
-                        GdbPath,
-                        "Cad_Dataset",
-                        eligibleLayerNames,
-                        SnapToleranceMeters,
-                        SelectedUtmZone);
-                }
+                        grp.OutFcName,
+                        grp.Class);
 
-                constructedParcels = f2pReport.ConstructedParcels;
-                if (!string.IsNullOrWhiteSpace(f2pReport.DiagnosticMessage))
-                {
-                    ReportProgress(70, "الخطوة 2: تشخيص تحويل الخطوط", f2pReport.DiagnosticMessage, phase: "المرحلة 2 من 5");
+                    f2pReport = rep;
+
+                    if (!rep.Success)
+                    {
+                        string failMsg = $"الخطوة 2: فشل بناء المضلعات لمجموعة {grp.GroupName}:\n{rep.DiagnosticMessage}";
+                        StatusMessage = failMsg;
+                        ReportError(failMsg, $"فشل تحويل خطوط {grp.GroupName}");
+                        ResetProgress(failMsg, "توقف تحويل الخطوط");
+                        return; // ANY FAILURE IN STEPS 1-3 STOPS THE STEP WITH A CLEAR MESSAGE. NO FALLBACK.
+                    }
+
+                    foreach (var (poly, cls) in rep.ConstructedClassParcels)
+                    {
+                        constructedParcelsWithClass.Add((poly, cls, grp.GroupName));
+                    }
+                    if (!string.IsNullOrWhiteSpace(rep.DiagnosticMessage))
+                    {
+                        ReportProgress(70, $"الخطوة 2: نتيجة {grp.GroupName}", rep.DiagnosticMessage, phase: "المرحلة 2 من 5");
+                    }
+
+                    // Delete intermediate temporary feature class from GDB immediately
+                    try
+                    {
+                        var delArgs = Geoprocessing.MakeValueArray(Path.Combine(GdbPath, grp.OutFcName));
+                        await Geoprocessing.ExecuteToolAsync("management.Delete", delArgs);
+                    }
+                    catch { }
                 }
             }
 
@@ -2317,12 +2760,12 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
                         }
                     }
 
-                    // B. Integrate Polygons Constructed from Lines via ArcPy / GP
-                    if (constructedParcels.Count > 0)
+                    // B. Integrate Polygons Constructed from Lines via FeatureToPolygon
+                    if (constructedParcelsWithClass.Count > 0)
                     {
-                        foreach (var cp in constructedParcels)
+                        foreach (var (cpPoly, cpClass, cpGrp) in constructedParcelsWithClass)
                         {
-                            var cleaned = ParcelPolygonizer.Clean2DPlanar(cp.Polygon);
+                            var cleaned = ParcelPolygonizer.Clean2DPlanar(cpPoly);
                             var metrics = ParcelPolygonizer.ComputeMetrics(cleaned);
 
                             bool isDuplicate = false;
@@ -2340,92 +2783,42 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
                             }
                             if (isDuplicate) continue;
 
-                            var lyrInfo = eligibleLayers.FirstOrDefault(el => el.LayerName.Equals(cp.LayerName, StringComparison.OrdinalIgnoreCase));
-                            bool isMain = lyrInfo == null || lyrInfo.Category == "Main Parcels" || lyrInfo.Role == LayerRole.Boundary;
-
                             long newId = _parcels.Count + 1;
                             var parcel = new ParcelRecord
                             {
                                 InternalId = newId,
                                 PlotId = $"P{newId}",
-                                Class = isMain ? ParcelClass.Main : ParcelClass.Sub,
+                                Class = cpClass,
                                 AreaSqm = metrics.areaSqm,
-                                Remarks = $"Constructed from Lines via ArcPy [{cp.LayerName}]"
+                                Usage = cpClass == ParcelClass.Main ? "قطعة رئيسية" : "خدمات / فرعية",
+                                Remarks = $"From FeatureToPolygon [{cpGrp}]"
                             };
                             _parcels.Add(parcel);
                             _parcelGeometries[parcel.InternalId] = cleaned;
                         }
                     }
 
-                    // C. Curve-Preserving Line Polygonization and Integration
-                    // 1. Run authoritative planar curve-preserving polygonizer
-                    var (curveRings, manifest) = CurvePreservingPolygonizerService.Polygonize(
-                        datasetFeatures.CurveEntitiesToPolygonize,
-                        eligibleLayerNames.ToList(),
-                        new PolygonizerOptions
-                        {
-                            SnapToleranceMeters = SnapToleranceMeters,
-                            GroupLayersTogether = PolygonizeGroupOfLayers,
-                            ExtendLinesAndCurves = ExtendLinesAndCurves,
-                            ExtendToleranceMeters = ExtendToleranceMeters,
-                            KeepAlreadyClosedPolylines = LayerGeometryModeService.ShouldIngestPolygons(SelectedGeometryMode)
-                        },
-                        category: "Main Parcels");
-
-                    // 2. Add curve rings as parcels
-                    foreach (var ring in curveRings)
+                    // C. Curve-Preserving Line Polygonization and Integration (Only if not in pure Lines mode)
+                    if (!isLineOnlyMode && LayerGeometryModeService.ShouldPolygonizeLines(SelectedGeometryMode, BuildPolygonsFromLines))
                     {
-                        if (ring.Segments.Count < 2) continue;
-                        var cleaned = NativeCurveAuditHelper.BuildNativePolygonFromRing(ring, activeSr);
-                        var metrics = ParcelPolygonizer.ComputeMetrics(cleaned);
-
-                        // Check duplicate
-                        bool isDuplicate = false;
-                        foreach (var existing in _parcelGeometries.Values)
-                        {
-                            if (Math.Abs(existing.Area - metrics.areaSqm) < 0.5)
+                        var (curveRings, manifest) = CurvePreservingPolygonizerService.Polygonize(
+                            datasetFeatures.CurveEntitiesToPolygonize,
+                            eligibleLayerNames.ToList(),
+                            new PolygonizerOptions
                             {
-                                var ec = existing.Extent.Center;
-                                if (Math.Abs(ec.X - metrics.centroid.X) < 0.2 && Math.Abs(ec.Y - metrics.centroid.Y) < 0.2)
-                                {
-                                    isDuplicate = true;
-                                    break;
-                                }
-                            }
-                        }
-                        if (isDuplicate) continue;
+                                SnapToleranceMeters = SnapToleranceMeters,
+                                GroupLayersTogether = PolygonizeGroupOfLayers,
+                                ExtendLinesAndCurves = ExtendLinesAndCurves,
+                                ExtendToleranceMeters = ExtendToleranceMeters,
+                                KeepAlreadyClosedPolylines = LayerGeometryModeService.ShouldIngestPolygons(SelectedGeometryMode)
+                            },
+                            category: "Main Parcels");
 
-                        var lyrInfo = eligibleLayers.FirstOrDefault(el => el.LayerName.Equals(ring.SourceLayer, StringComparison.OrdinalIgnoreCase));
-                        bool isMain = lyrInfo == null || lyrInfo.Category == "Main Parcels" || lyrInfo.Role == LayerRole.Boundary;
-
-                        long newId = _parcels.Count + 1;
-                        var parcel = new ParcelRecord
+                        // 2. Add curve rings as parcels
+                        foreach (var ring in curveRings)
                         {
-                            InternalId = newId,
-                            PlotId = $"P{newId}",
-                            Class = isMain ? ParcelClass.Main : ParcelClass.Sub,
-                            AreaSqm = metrics.areaSqm > 0 ? metrics.areaSqm : ring.Area,
-                            Remarks = ring.WasUsedAsIs 
-                                ? $"From Closed Polyline [{ring.SourceLayer}]" 
-                                : $"Polygonized from CAD layer [{ring.SourceLayer}]"
-                        };
-                        _parcels.Add(parcel);
-                        _parcelGeometries[parcel.InternalId] = cleaned;
-                    }
-
-                    // 3. Integrate constructed parcels from FeatureToPolygon (if available and not duplicate)
-                    if (constructedParcels.Count > 0)
-                    {
-                        foreach (var item in constructedParcels)
-                        {
-                            var cleaned = ParcelPolygonizer.Ensure2D(item.Polygon);
-                            if (cleaned.SpatialReference == null || cleaned.SpatialReference.Wkid != SelectedUtmZone)
-                            {
-                                var b = new PolygonBuilderEx(cleaned) { SpatialReference = activeSr };
-                                b.HasZ = false;
-                                b.HasM = false;
-                                cleaned = (Polygon)b.ToGeometry();
-                            }
+                            if (ring.Segments.Count < 2) continue;
+                            var cleaned = NativeCurveAuditHelper.BuildNativePolygonFromRing(ring, activeSr);
                             var metrics = ParcelPolygonizer.ComputeMetrics(cleaned);
 
                             // Check duplicate
@@ -2444,13 +2837,7 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
                             }
                             if (isDuplicate) continue;
 
-                            string effectiveLayer = item.LayerName;
-                            if (string.IsNullOrWhiteSpace(effectiveLayer) && eligibleLayerNames.Count > 0)
-                            {
-                                effectiveLayer = eligibleLayerNames.First();
-                            }
-
-                            var lyrInfo = eligibleLayers.FirstOrDefault(el => el.LayerName.Equals(effectiveLayer, StringComparison.OrdinalIgnoreCase));
+                            var lyrInfo = eligibleLayers.FirstOrDefault(el => el.LayerName.Equals(ring.SourceLayer, StringComparison.OrdinalIgnoreCase));
                             bool isMain = lyrInfo == null || lyrInfo.Category == "Main Parcels" || lyrInfo.Role == LayerRole.Boundary;
 
                             long newId = _parcels.Count + 1;
@@ -2459,25 +2846,20 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
                                 InternalId = newId,
                                 PlotId = $"P{newId}",
                                 Class = isMain ? ParcelClass.Main : ParcelClass.Sub,
-                                AreaSqm = metrics.areaSqm,
-                                Remarks = $"FeatureToPolygon from [{effectiveLayer}]"
+                                AreaSqm = metrics.areaSqm > 0 ? metrics.areaSqm : ring.Area,
+                                Remarks = ring.WasUsedAsIs 
+                                    ? $"From Closed Polyline [{ring.SourceLayer}]" 
+                                    : $"Polygonized from CAD layer [{ring.SourceLayer}]"
                             };
                             _parcels.Add(parcel);
                             _parcelGeometries[parcel.InternalId] = cleaned;
-
-                            // Update manifest
-                            var mItem = manifest.Layers.FirstOrDefault(l => l.LayerName.Equals(effectiveLayer, StringComparison.OrdinalIgnoreCase));
-                            if (mItem != null)
-                            {
-                                mItem.PolygonsContributed++;
-                            }
                         }
-                    }
 
-                    manifest.TotalPolygonsBuilt = _parcels.Count;
-                    LastPolygonizationManifest = manifest;
-                    IsPolygonizationStale = false;
-                    PolygonizationStaleReason = string.Empty;
+                        manifest.TotalPolygonsBuilt = _parcels.Count;
+                        LastPolygonizationManifest = manifest;
+                        IsPolygonizationStale = false;
+                        PolygonizationStaleReason = string.Empty;
+                    }
 
                     // C. Spatially Match Annotations to Parcels (PlotId and Usage) via High-Speed 2D Spatial Grid Index
                     if (datasetFeatures.Annotations.Count > 0 && _parcels.Count > 0)
@@ -2871,17 +3253,48 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
             // Save parcels to live GDB layer so they are visible on the map in active UTM projection immediately!
             try
             {
-                string fcParcelName = IsDemoProject ? "DEMO_PARCEL" : "PARCEL";
+                // Clean up any legacy intermediate feature classes from GDB
+                try
+                {
+                    var delMain = Geoprocessing.MakeValueArray(Path.Combine(GdbPath, "Cad_Constructed_MAIN"));
+                    await Geoprocessing.ExecuteToolAsync("management.Delete", delMain);
+                }
+                catch { }
+                try
+                {
+                    var delSub = Geoprocessing.MakeValueArray(Path.Combine(GdbPath, "Cad_Constructed_SUB"));
+                    await Geoprocessing.ExecuteToolAsync("management.Delete", delSub);
+                }
+                catch { }
+
+                string fcParcelName = IsDemoProject ? "DEMO_Cad_Constructed_Parcels" : "Cad_Constructed_Parcels";
                 string templateParcel = Path.Combine(_helperManager.TemplatesDir, "PARCEL.shp");
                 await GdbFeatureClassService.EnsureFeatureClassFromTemplateAsync(GdbPath, fcParcelName, templateParcel, SelectedUtmZone);
                 await QueuedTask.Run(() =>
                 {
                     GdbFeatureClassService.WriteParcelsToFeatureClass(GdbPath, fcParcelName, _parcels, _parcelGeometries);
-                    GdbFeatureClassService.AddOrRefreshMapLayer(MapView.Active?.Map, GdbPath, fcParcelName, $"{fcParcelName} Live GDB");
+                    
+                    var map = MapView.Active?.Map;
+                    if (map != null)
+                    {
+                        var toRemove = map.GetLayersAsFlattenedList()
+                            .Where(l => l.Name.StartsWith("temp_f2p", StringComparison.OrdinalIgnoreCase) ||
+                                        l.Name.Equals("Cad_Constructed_MAIN", StringComparison.OrdinalIgnoreCase) ||
+                                        l.Name.Equals("Cad_Constructed_SUB", StringComparison.OrdinalIgnoreCase))
+                            .ToList();
+                        foreach (var l in toRemove)
+                        {
+                            try { map.RemoveLayer(l); } catch { }
+                        }
+                    }
+
+                    GdbFeatureClassService.AddOrRefreshMapLayer(MapView.Active?.Map, GdbPath, fcParcelName, fcParcelName);
                 });
 
-                // Register authoritative Step 2 output feature class reference
-                Step2OutputFeatureClassPath = Path.Combine(GdbPath, fcParcelName);
+                // Register authoritative single Step 2 output feature class reference
+                string verifiedFcPath = Path.Combine(GdbPath, fcParcelName);
+                RegisterStepOutput(2, verifiedFcPath, _parcels.Count, SelectedUtmZone);
+                Step2OutputFeatureClassPath = verifiedFcPath;
                 Step2OutputTimestamp = DateTime.Now;
                 Step2OutputFeatureCount = _parcels.Count;
                 System.Diagnostics.Debug.WriteLine($"[Audit Log] Step 2 Output registered: Path='{Step2OutputFeatureClassPath}', Count={Step2OutputFeatureCount}, Time={Step2OutputTimestamp:yyyy-MM-dd HH:mm:ss}");
@@ -2906,19 +3319,47 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
     public async Task ExecuteStep3PopulateSchemaAsync(bool isPartOfPipeline = false)
     {
         if (!isPartOfPipeline) IsBusy = true;
-        ReportProgress(10, "Step 3: Populate Schema & Municipal Data", "Applying MOMRAH / Balady data model (26 attributes)...", phase: "Phase 3 of 5");
+        ReportProgress(10, "الخطوة 3: تعبئة الاسكيما والبيانات البلدية", "التحقق من مصدر البيانات وتطبيق نموذج MOMRAH (26 حقلاً)...", phase: "المرحلة 3 من 5");
 
         try
         {
+            // 1. Resolve & Validate Step 3 Input from disk
+            string step3Input;
+            if (GetSource(3) == StepSource.OwnData)
+            {
+                step3Input = ResolveOwnDataOrFail(3);
+                await ValidateInputOrFailAsync(step3Input, GeometryType.Polygon);
+            }
+            else
+            {
+                step3Input = PipelineStateManager.GetVerifiedOutputOrFail(_helperManager.PipelineStateFile, step: 2).Path;
+                await ValidateInputOrFailAsync(step3Input, GeometryType.Polygon);
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[Step3] option={GetSource(3)} source={step3Input}");
+
+            // 2. Read parcels from disk (always load current data from disk)
             await QueuedTask.Run(() =>
             {
-                IngestWorkingParcelsIfNeeded("الخطوة 3: تعبئة الاسكيما والبيانات البلدية");
-
-                if (_parcels.Count == 0)
+                var (loadedParcels, loadedGeoms, _, _) = GdbFeatureClassService.ReadParcelsFromDataset(step3Input, SelectedUtmZone, _helperManager.ScratchDir);
+                if (loadedParcels.Count > 0)
                 {
-                    StatusMessage = "No parcels loaded to populate schema. Please run Step 2 first.";
-                    throw new InvalidOperationException("No parcels loaded to populate schema.");
+                    _parcels.Clear();
+                    _parcels.AddRange(loadedParcels);
+                    _parcelGeometries.Clear();
+                    foreach (var kvp in loadedGeoms)
+                        _parcelGeometries[kvp.Key] = kvp.Value;
                 }
+            });
+
+            if (_parcels.Count == 0)
+            {
+                StatusMessage = "لم يتم تحميل أي بارسلات صالحة لتطبيق الاسكيما.";
+                throw new InvalidOperationException("No parcels loaded to populate schema.");
+            }
+
+            await QueuedTask.Run(() =>
+            {
 
                 if (IsSchemaFromCustom)
                 {
@@ -3064,8 +3505,26 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
                 ReportProgress(80, "Step 3: Apply Schema & Metadata", $"Applying schema and address to {_parcels.Count} parcels...", phase: "Phase 3 of 5");
             });
 
-            // 4. Commit to Native GDB Feature Class with MOMRAH schema (GP tool executed outside QueuedTask)
-            string fcParcelName = IsDemoProject ? "DEMO_PARCEL" : "PARCEL";
+            // 4. Manual edit check and Commit to single PARCEL_Approved_Schema
+            string fcParcelName = IsDemoProject ? "DEMO_PARCEL_Approved_Schema" : "PARCEL_Approved_Schema";
+            string verifiedFcPath = Path.Combine(GdbPath, fcParcelName);
+
+            string? editDetails = null;
+            if (await GdbFeatureClassService.FeatureClassExistsAsync(verifiedFcPath) &&
+                PipelineStateManager.IsEditedSinceWritten(_helperManager.PipelineStateFile, 3, out editDetails))
+            {
+                var promptResult = ArcGIS.Desktop.Framework.Dialogs.MessageBox.Show(
+                    $"تم رصد تعديلات يدوية على طبقة الخطوة 3 ({fcParcelName}): {editDetails}\n\nهل ترغب في استبدال هذه التعديلات وإعادة كتابة الطبقة؟",
+                    "تأكيد استبدال التعديلات اليدوية",
+                    System.Windows.MessageBoxButton.YesNo,
+                    System.Windows.MessageBoxImage.Warning);
+                if (promptResult != System.Windows.MessageBoxResult.Yes)
+                {
+                    StatusMessage = "تم إلغاء إعادة تشغيل الخطوة 3 للحفاظ على التعديلات اليدوية.";
+                    return;
+                }
+            }
+
             string templateParcel = Path.Combine(_helperManager.TemplatesDir, "PARCEL.shp");
             await GdbFeatureClassService.EnsureFeatureClassFromTemplateAsync(GdbPath, fcParcelName, templateParcel, SelectedUtmZone);
 
@@ -3075,13 +3534,17 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
                 GdbFeatureClassService.AddOrRefreshMapLayer(MapView.Active?.Map, GdbPath, fcParcelName, $"{fcParcelName} Live GDB");
             });
 
-            // Register Step 3 output reference
-            Step3ExportedParcelsFeatureClassPath = Path.Combine(GdbPath, fcParcelName);
-            Step3ExportedTimestamp = DateTime.Now;
-            Step3ExportedFeatureCount = _parcels.Count;
-            System.Diagnostics.Debug.WriteLine($"[Audit Log] Step 3 Output registered: Path='{Step3ExportedParcelsFeatureClassPath}', Count={Step3ExportedFeatureCount}, Time={Step3ExportedTimestamp:yyyy-MM-dd HH:mm:ss}");
+            // Register Step 3 authoritative single output reference after verification
+            var (isVerified, verifyReason) = await GdbFeatureClassService.VerifyPolygonFeatureClassAsync(verifiedFcPath, _parcels.Count, SelectedUtmZone);
+            if (!isVerified)
+            {
+                ReportError($"فشل التحقق من صحة مخرجات الخطوة 3: {verifyReason}", "خطأ في التحقق من الخطوة 3");
+                return;
+            }
 
-            ResetProgress($"Step 3 completed: Populated schema and municipal data successfully for {_parcels.Count} parcels and saved to GDB.", "Step 3 Complete");
+            RegisterStepOutput(3, verifiedFcPath, _parcels.Count, SelectedUtmZone);
+            RegisterVerifiedStep3Output(verifiedFcPath, _parcels.Count, SelectedUtmZone);
+            ResetProgress($"اكتملت الخطوة 3: تم حفظ وتوثيق {_parcels.Count} قطعة بالاسكيما البلدية داخل '{fcParcelName}' بنجاح.", "اكتملت الخطوة 3");
         }
         catch (Exception ex)
         {
@@ -3119,104 +3582,36 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
             var localInferred = new List<InferredBorderItem>();
             ExportDiffReport? diff = null;
 
-            string step4SourcePath = "";
-            if (WorkingSourceMode == "UserOwnData")
-            {
-                if (!string.IsNullOrWhiteSpace(CustomSchemaDataPath) && (File.Exists(CustomSchemaDataPath) || GdbFeatureClassService.FeatureClassExists(CustomSchemaDataPath)))
-                {
-                    step4SourcePath = CustomSchemaDataPath;
-                }
-                else if (!string.IsNullOrWhiteSpace(SourceParcelShpPath) && File.Exists(SourceParcelShpPath))
-                {
-                    step4SourcePath = SourceParcelShpPath;
-                }
-                else if (SelectedMapLayer?.Layer != null)
-                {
-                    step4SourcePath = SelectedMapLayer.Name;
-                }
-                else
-                {
-                    string err = "المصدر المخصص غير محدد أو غير موجود. يرجى اختيار ملف أو طبقة صراحة.";
-                    ReportError(err, "خطأ في مصدر الخطوة 4");
-                    return;
-                }
-            }
-            else if (WorkingSourceMode == "LatestExport")
-            {
-                var state = ExportStateManager.LoadLatestExport(_helperManager.LastExportStateFile);
-                bool validPath = state != null && !string.IsNullOrWhiteSpace(state.ParcelPath) &&
-                    (File.Exists(state.ParcelPath) || Directory.Exists(state.ParcelPath) ||
-                     (state.ParcelPath.Contains(".gdb") && Directory.Exists(state.ParcelPath.Substring(0, state.ParcelPath.IndexOf(".gdb", StringComparison.OrdinalIgnoreCase) + 4))));
-                if (!validPath)
-                {
-                    IsWorkingFromMissing = true;
-                    WorkingFromMissingWarning = $"Latest export dataset not found at '{state?.ParcelPath ?? "null"}'. Please select an export from history, browse, or use session data.";
-                    ReportError(WorkingFromMissingWarning, "Missing Latest Export");
-                    return;
-                }
+            var mode = GetSource(4);
+            string step4SourcePath = mode == StepSource.OwnData
+                ? ResolveOwnDataOrFail(4)
+                : PipelineStateManager.GetVerifiedOutputOrFail(_helperManager.PipelineStateFile, step: 3).Path;
 
-                IsWorkingFromMissing = false;
-                step4SourcePath = state!.ParcelPath;
-            }
-            else
-            {
-                // Authoritative pipeline source: MUST consume Step 3 output / exported feature class
-                if (string.IsNullOrWhiteSpace(Step3ExportedParcelsFeatureClassPath) ||
-                    !GdbFeatureClassService.FeatureClassExists(Step3ExportedParcelsFeatureClassPath))
-                {
-                    string missingMsg = "الخطوة 4: لم يتم العثور على مخرجات معتمدة من الخطوة 3 (Export Step 3).\n" +
-                        $"المسار المطلوب: '{(Step3ExportedParcelsFeatureClassPath ?? "غير محدد")}'.\n" +
-                        "يرجى تصدير الخطوة 3 أولاً (Export Step 3) لإنتاج طبقة البارسلات المعتمدة، أو النقر على 'تغيير / استعراض' لاختيار مصدر بديل صراحة.";
-                    StatusMessage = missingMsg;
-                    ReportError(missingMsg, "مصدر الخطوة 4 مفقود");
-                    ArcGIS.Desktop.Framework.Dialogs.MessageBox.Show(missingMsg, "تنبيه مصدر الخطوة 4", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
-                    return;
-                }
+            await ValidateInputOrFailAsync(step4SourcePath, GeometryType.Polygon);
 
-                step4SourcePath = Step3ExportedParcelsFeatureClassPath;
-            }
+            System.Diagnostics.Debug.WriteLine($"[Step4] option={mode} source={step4SourcePath}");
 
             ReportProgress(15, "الخطوة 4: قراءة مخرجات الخطوة 3", $"قراءة مضلعات البارسلات من '{Path.GetFileName(step4SourcePath)}'...", phase: "المرحلة 4 من 5");
 
             await QueuedTask.Run(() =>
             {
-                if (WorkingSourceMode == "LatestExport")
+                var (loadedParcels, loadedGeoms, wasCopied, notice) = GdbFeatureClassService.ReadParcelsFromDataset(step4SourcePath, SelectedUtmZone, _helperManager.ScratchDir);
+                if (loadedParcels.Count == 0)
                 {
-                    var state = ExportStateManager.LoadLatestExport(_helperManager.LastExportStateFile)!;
-                    var (loadedParcels, loadedGeoms, wasCopiedP, noticeP) = GdbFeatureClassService.ReadParcelsFromDataset(state.ParcelPath, SelectedUtmZone, _helperManager.ScratchDir);
-                    var (loadedBorders, loadedBorderGeoms, wasCopiedB, noticeB) = (!string.IsNullOrEmpty(state.BorderPath) && (File.Exists(state.BorderPath) || state.BorderPath.Contains(".gdb")))
-                        ? GdbFeatureClassService.ReadBordersFromDataset(state.BorderPath, SelectedUtmZone, _helperManager.ScratchDir)
-                        : (new List<BorderRecord>(), new Dictionary<long, Polyline>(), false, (string?)null);
-
-                    diff = ExportStateManager.DetectEdits(state, loadedParcels, loadedBorders,
-                        areaToleranceSqm: _profileModel?.AreaToleranceSqm ?? 0.5);
-
-                    _parcels.Clear();
-                    _parcels.AddRange(loadedParcels);
-                    _parcelGeometries.Clear();
-                    foreach (var kvp in loadedGeoms)
-                        _parcelGeometries[kvp.Key] = kvp.Value;
+                    string emptyMsg = $"الطبقة المدخلة للخطوة 4 فارغة ولا تحتوي على معالم مضلعات: '{step4SourcePath}'.";
+                    StatusMessage = emptyMsg;
+                    throw new InvalidOperationException(emptyMsg);
                 }
-                else
-                {
-                    var (loadedParcels, loadedGeoms, wasCopied, notice) = GdbFeatureClassService.ReadParcelsFromDataset(step4SourcePath, SelectedUtmZone, _helperManager.ScratchDir);
-                    if (loadedParcels.Count == 0)
-                    {
-                        string emptyMsg = $"الطبقة المدخلة للخطوة 4 فارغة ولا تحتوي على معالم مضلعات: '{step4SourcePath}'.";
-                        StatusMessage = emptyMsg;
-                        throw new InvalidOperationException(emptyMsg);
-                    }
 
-                    _parcels.Clear();
-                    _parcels.AddRange(loadedParcels);
-                    _parcelGeometries.Clear();
-                    foreach (var kvp in loadedGeoms)
-                        _parcelGeometries[kvp.Key] = kvp.Value;
+                _parcels.Clear();
+                _parcels.AddRange(loadedParcels);
+                _parcelGeometries.Clear();
+                foreach (var kvp in loadedGeoms)
+                    _parcelGeometries[kvp.Key] = kvp.Value;
 
-                    string auditLog = $"[Step 4 Authoritative Input Verification] Input Path: '{step4SourcePath}', Geometry: Polygon, FeatureCount: {_parcels.Count}, CRS: EPSG:{SelectedUtmZone}, Timestamp: {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
-                    System.Diagnostics.Debug.WriteLine(auditLog);
-                    StatusMessage = $"الخطوة 4: تم تحميل {_parcels.Count} قطعة من '{Path.GetFileName(step4SourcePath)}' بنجاح (EPSG:{SelectedUtmZone}).";
-                }
+                string auditLog = $"[Step 4 Authoritative Input Verification] Input Path: '{step4SourcePath}', Geometry: Polygon, FeatureCount: {_parcels.Count}, CRS: EPSG:{SelectedUtmZone}, Timestamp: {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
+                System.Diagnostics.Debug.WriteLine(auditLog);
+                StatusMessage = $"الخطوة 4: تم تحميل {_parcels.Count} قطعة من '{Path.GetFileName(step4SourcePath)}' بنجاح (EPSG:{SelectedUtmZone}).";
 
                 // Strictly harmonize ALL parcel geometries to the active working UTM spatial reference
                 foreach (var id in _parcelGeometries.Keys.ToList())
@@ -3326,8 +3721,26 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
                 InferredBorders.Add(inf);
             }
 
-            // Commit borders to GDB (GP tool executed outside QueuedTask)
-            string fcBorderName = IsDemoProject ? "DEMO_Border" : "Border";
+            // Commit borders to GDB as BORDER_Cardinal_Approved with manual edit check
+            string fcBorderName = IsDemoProject ? "DEMO_BORDER_Cardinal_Approved" : "BORDER_Cardinal_Approved";
+            string verifiedBorderFc = Path.Combine(GdbPath, fcBorderName);
+
+            string? borderEditDetails = null;
+            if (await GdbFeatureClassService.FeatureClassExistsAsync(verifiedBorderFc) &&
+                PipelineStateManager.IsEditedSinceWritten(_helperManager.PipelineStateFile, 4, out borderEditDetails))
+            {
+                var promptResult = ArcGIS.Desktop.Framework.Dialogs.MessageBox.Show(
+                    $"تم رصد تعديلات يدوية على طبقة حدود الخطوة 4 ({fcBorderName}): {borderEditDetails}\n\nهل ترغب في استبدال هذه التعديلات وإعادة إنشاء الحدود؟",
+                    "تأكيد استبدال الحدود المعدلة",
+                    System.Windows.MessageBoxButton.YesNo,
+                    System.Windows.MessageBoxImage.Warning);
+                if (promptResult != System.Windows.MessageBoxResult.Yes)
+                {
+                    StatusMessage = "تم إلغاء إعادة إنشاء الحدود للحفاظ على التعديلات اليدوية.";
+                    return;
+                }
+            }
+
             string templateBorder = Path.Combine(_helperManager.TemplatesDir, "border.shp");
             await GdbFeatureClassService.EnsureFeatureClassFromTemplateAsync(GdbPath, fcBorderName, templateBorder, SelectedUtmZone);
 
@@ -3337,8 +3750,16 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
                 GdbFeatureClassService.AddOrRefreshMapLayer(MapView.Active?.Map, GdbPath, fcBorderName, $"{fcBorderName} Live GDB");
             });
 
+            var (isBorderVerified, borderVerifyReason) = await GdbFeatureClassService.VerifyPolylineFeatureClassAsync(verifiedBorderFc, _borders.Count, SelectedUtmZone);
+            if (!isBorderVerified)
+            {
+                ReportError($"فشل التحقق من صحة طبقة الحدود: {borderVerifyReason}", "خطأ في التحقق من الخطوة 4");
+                return;
+            }
+
+            RegisterStepOutput(4, verifiedBorderFc, _borders.Count, SelectedUtmZone);
             BorderCountSummary = $"Borders: {_borders.Count} records (MAIN parcels only, 4 per parcel)";
-            ResetProgress($"الخطوة 4 اكتملت: تم إنشاء {_borders.Count} خط حدود ({InferredBorders.Count} مستنتج).", "اكتمل توليد الحدود");
+            ResetProgress($"الخطوة 4 اكتملت: تم إنشاء {_borders.Count} خط حدود وحفظها داخل '{fcBorderName}'.", "اكتمل توليد الحدود");
         }
         catch (Exception ex)
         {
@@ -3379,17 +3800,35 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
             ValidationResult? valResult = null;
             SchemaComplianceResult? complianceResult = null;
 
+            string step5ParcelSource = GetSource(5) == StepSource.OwnData
+                ? ResolveOwnDataOrFail(5)
+                : PipelineStateManager.GetVerifiedOutputOrFail(_helperManager.PipelineStateFile, step: 3).Path;
+            await ValidateInputOrFailAsync(step5ParcelSource, GeometryType.Polygon);
+
+            var step4Output = PipelineStateManager.LoadStepOutput(_helperManager.PipelineStateFile, 4);
+
             await QueuedTask.Run(() =>
             {
-                if (_parcels.Count == 0)
+                var (pLoaded, pGeoms, _, _) = GdbFeatureClassService.ReadParcelsFromDataset(step5ParcelSource, SelectedUtmZone, _helperManager.ScratchDir);
+                if (pLoaded.Count > 0)
                 {
-                    IngestWorkingParcelsIfNeeded("الخطوة 5: التصدير والتدقيق");
+                    _parcels.Clear();
+                    _parcels.AddRange(pLoaded);
+                    _parcelGeometries.Clear();
+                    foreach (var kvp in pGeoms) _parcelGeometries[kvp.Key] = kvp.Value;
                 }
-                if (_borders.Count == 0 && Directory.Exists(GdbPath))
+
+                string borderPath = step4Output?.Path ?? Path.Combine(GdbPath, "BORDER_Cardinal_Approved");
+                if (GdbFeatureClassService.FeatureClassExists(borderPath) || File.Exists(borderPath))
                 {
-                    var bLoaded = GdbFeatureClassService.ReadBordersFromFeatureClass(GdbPath, "Border", SelectedUtmZone);
-                    _borders.AddRange(bLoaded.Borders);
-                    foreach (var kvp in bLoaded.Geometries) _borderGeometries[kvp.Key] = kvp.Value;
+                    var (bLoaded, bGeoms, _, _) = GdbFeatureClassService.ReadBordersFromDataset(borderPath, SelectedUtmZone, _helperManager.ScratchDir);
+                    if (bLoaded.Count > 0)
+                    {
+                        _borders.Clear();
+                        _borders.AddRange(bLoaded);
+                        _borderGeometries.Clear();
+                        foreach (var kvp in bGeoms) _borderGeometries[kvp.Key] = kvp.Value;
+                    }
                 }
 
                 // Sync review edits from InferredBorders table into _borders records
@@ -3564,7 +4003,8 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
                                         finalShapeDir,
                                         templateFolder,
                                         complianceResult.DeviatingParcels,
-                                        _parcelGeometries
+                                        _parcelGeometries,
+                                        SelectedUtmZone
                                     );
                                 }
                                 catch (Exception devEx)
@@ -3741,8 +4181,21 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
                     state.Datasets["BORDER"] = bDs;
                 }
 
+                // P6 Verification: Verify all deliverables before updating latest export
+                var v = GdbFeatureClassService.VerifyFinalExport(finalDir, _parcels.Count, _borders.Count, SelectedUtmZone);
+                if (!v.Ok)
+                {
+                    ReportError("Final export failed verification:\n" + v.Report, "Final Export Verification Error");
+                    return;
+                }
+
                 int maxHist = _profileModel?.MaxExportHistoryCount ?? 10;
-                ExportStateManager.SaveExportState(_helperManager.LastExportStateFile, state, maxHist);
+                if (!ExportStateManager.TrySaveExportState(_helperManager.LastExportStateFile, state, maxHist, out var saveErr))
+                {
+                    ReportError("Could not record the latest export: " + saveErr, "State Error");
+                    return;
+                }
+
                 LatestExportPath = finalDir;
                 LatestExportTimestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
                 HasLatestExport = true;
@@ -3750,14 +4203,15 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
             }
             catch (Exception stateEx)
             {
-                System.Diagnostics.Debug.WriteLine($"[Part B] SaveExportState failed: {stateEx.Message}");
+                ReportError($"[Step 5 Error] Failed finalizing export state: {stateEx.Message}", "State Error");
+                return;
             }
 
             // Informative ExportStatusSummary
-            ExportStatusSummary = $"تم تصدير المخرجات النهائية بنجاح إلى هيكل Final الموحد:\n📁 {finalDir}";
-            ExportStatusSummary += $"\n✔ Final.gdb: PARCEL, BORDER";
-            ExportStatusSummary += $"\n✔ Shape: PARCEL.shp, BORDER.shp (2D Planar, UTF-8 .cpg)";
-            ExportStatusSummary += $"\n✔ Reports: كافة تقارير الجودة (QA_QC_Report.xlsx, Missing_Data_Report.csv, Audit_Log.json, PARCEs_landuse.xlsx)";
+            ExportStatusSummary = $"تم تصدير المخرجات النهائية والتحقق منها بنجاح إلى هيكل Final الموحد:\n📁 {finalDir}";
+            ExportStatusSummary += $"\n✔ Final.gdb: PARCEL ({_parcels.Count}), BORDER ({_borders.Count})";
+            ExportStatusSummary += $"\n✔ Shape: PARCEL.shp, BORDER.shp (2D Planar, UTF-8 .cpg, all sidecars verified)";
+            ExportStatusSummary += $"\n✔ Reports: كافة تقارير الجودة تم التحقق منها داخل مجلد Reports";
 
             if (valResult != null && valResult.Errors.Count > 0)
             {
@@ -3809,7 +4263,7 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
             {
                 try
                 {
-                    ShapefileExporter.ExportSingleParcelShapefile(outDir, _helperManager.TemplatesDir, _parcels, _parcelGeometries, baseName, SelectedUtmZone);
+                    await ShapefileExporter.ExportSingleParcelShapefileAsync(outDir, _helperManager.TemplatesDir, _parcels, _parcelGeometries, baseName, SelectedUtmZone);
                 }
                 catch (Exception shpEx)
                 {
@@ -3863,7 +4317,7 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
             {
                 try
                 {
-                    ShapefileExporter.ExportSingleParcelShapefile(outDir, _helperManager.TemplatesDir, _parcels, _parcelGeometries, baseName, SelectedUtmZone);
+                    await ShapefileExporter.ExportSingleParcelShapefileAsync(outDir, _helperManager.TemplatesDir, _parcels, _parcelGeometries, baseName, SelectedUtmZone);
                 }
                 catch (Exception shpEx)
                 {
@@ -3875,15 +4329,22 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
             {
                 await GdbFeatureClassService.ExportParcelsToGdbAsync(GdbPath, baseName, _parcels, _parcelGeometries, _helperManager.TemplatesDir, SelectedUtmZone);
 
-                // Register authoritative Step 3 export reference for Step 4 consumption
-                Step3ExportedParcelsFeatureClassPath = Path.Combine(GdbPath, baseName);
-                Step3ExportedTimestamp = DateTime.Now;
-                Step3ExportedFeatureCount = _parcels.Count;
-                System.Diagnostics.Debug.WriteLine($"[Audit Log] Step 3 Export registered: Path='{Step3ExportedParcelsFeatureClassPath}', Count={Step3ExportedFeatureCount}, Time={Step3ExportedTimestamp:yyyy-MM-dd HH:mm:ss}");
+                // Register authoritative Step 3 export reference after verification (P2)
+                string gdbFcPath = Path.Combine(GdbPath, baseName);
+                var (isVerified, verifyReason) = await GdbFeatureClassService.VerifyPolygonFeatureClassAsync(gdbFcPath, _parcels.Count, SelectedUtmZone);
+                if (!isVerified)
+                {
+                    ReportError($"Step 3 GDB export failed verification: {verifyReason}", "Export Verification Error");
+                    return;
+                }
+
+                RegisterVerifiedStep3Output(gdbFcPath, _parcels.Count, SelectedUtmZone);
+                RefreshLatestExportStatus();
             }
             catch (Exception gdbEx)
             {
-                warns.Add($"[GDB Notice] {gdbEx.Message}");
+                ReportError($"Step 3 GDB export failed: {gdbEx.Message}", "Export Error");
+                return;
             }
 
             string msg = $"Step 3 Export Complete: Successfully exported {_parcels.Count} parcels (2D Planar) to '{Path.GetFileName(outDir)}\\{baseName}'.";
@@ -3920,7 +4381,7 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
             ReportProgress(50, "تصدير حدود الخطوة 4", $"كتابة {_borders.Count} خط حدود إلى '{baseName}'...");
             if (ExportShapefiles)
             {
-                ShapefileExporter.ExportSingleBorderShapefile(outDir, _helperManager.TemplatesDir, _borders, _borderGeometries, baseName, SelectedUtmZone);
+                await ShapefileExporter.ExportSingleBorderShapefileAsync(outDir, _helperManager.TemplatesDir, _borders, _borderGeometries, baseName, SelectedUtmZone);
             }
 
             await GdbFeatureClassService.ExportBordersToGdbAsync(GdbPath, baseName, _borders, _borderGeometries, _helperManager.TemplatesDir, SelectedUtmZone);
@@ -4127,7 +4588,9 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
             ReportNo = p.DefaultReportNo;
             if (p.ContinueFromLatestExport && HasLatestExport)
             {
-                WorkingSourceMode = "LatestExport";
+                ShowLatestExportBanner = true;
+                LatestExportBannerMessage = "Latest export is available — use it for this step? (أحدث تصدير متاح — هل ترغب باستخدامه لهذه الخطوة؟)";
+                StatusMessage = "تنبيه: أحدث تصدير متاح. يمكنك اختياره يدوياً من خيارات المصدر إذا رغبت في المتابعة منه.";
             }
             StatusMessage = $"Applied profile settings from '{profileName}.xlsx'.";
         }
@@ -4164,6 +4627,7 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
     {
         try
         {
+            InitializePipelineState();
             RefreshLatestExportStatus();
             // Default working data source remains CAD Session / Dataset as requested
             WorkingSourceMode = "FromPreviousStep";
@@ -4174,52 +4638,290 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
         }
     }
 
+    private void InitializePipelineState()
+    {
+        try
+        {
+            var step3 = PipelineStateManager.LoadStepOutput(_helperManager.PipelineStateFile, 3);
+            if (step3 != null && !string.IsNullOrWhiteSpace(step3.Path) &&
+                (File.Exists(step3.Path) || GdbFeatureClassService.FeatureClassExists(step3.Path)))
+            {
+                Step3ExportedParcelsFeatureClassPath = step3.Path;
+                Step3ExportedFeatureCount = step3.FeatureCount;
+                Step3ExportedTimestamp = step3.Timestamp;
+                System.Diagnostics.Debug.WriteLine($"[PipelineState] Restored Step 3 output from pipeline_state.json: Path='{step3.Path}', Count={step3.FeatureCount}");
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[PipelineState] InitializePipelineState error: {ex.Message}");
+        }
+    }
+
+    public void RegisterVerifiedStep3Output(string path, int count, int wkid)
+    {
+        Step3ExportedParcelsFeatureClassPath = path;
+        Step3ExportedTimestamp = DateTime.Now;
+        Step3ExportedFeatureCount = count;
+
+        try
+        {
+            var record = new StepOutputRecord
+            {
+                Step = 3,
+                Path = path,
+                FeatureCount = count,
+                Wkid = wkid,
+                Timestamp = Step3ExportedTimestamp ?? DateTime.Now,
+                RunId = Guid.NewGuid().ToString("N")
+            };
+            PipelineStateManager.TrySaveStepOutput(_helperManager.PipelineStateFile, record, out var err);
+            if (!string.IsNullOrEmpty(err))
+            {
+                System.Diagnostics.Debug.WriteLine($"[PipelineStateManager] Failed to persist Step 3 output: {err}");
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[PipelineStateManager] Exception saving Step 3 output: {ex.Message}");
+        }
+
+        System.Diagnostics.Debug.WriteLine($"[Audit Log] Step 3 Output registered & verified: Path='{Step3ExportedParcelsFeatureClassPath}', Count={Step3ExportedFeatureCount}, Time={Step3ExportedTimestamp:yyyy-MM-dd HH:mm:ss}");
+    }
+
+    private string? ResolveStep4UserOwnData()
+    {
+        if (!string.IsNullOrWhiteSpace(CustomSchemaDataPath) && (File.Exists(CustomSchemaDataPath) || GdbFeatureClassService.FeatureClassExists(CustomSchemaDataPath)))
+        {
+            return CustomSchemaDataPath;
+        }
+        else if (!string.IsNullOrWhiteSpace(SourceParcelShpPath) && File.Exists(SourceParcelShpPath))
+        {
+            return SourceParcelShpPath;
+        }
+        else if (SelectedMapLayer?.Layer != null)
+        {
+            return SelectedMapLayer.Name;
+        }
+        else
+        {
+            string err = "المصدر المخصص غير محدد أو غير موجود. يرجى اختيار ملف أو طبقة صراحة.";
+            ReportError(err, "خطأ في مصدر الخطوة 4");
+            return null;
+        }
+    }
+
+    public string? ResolveStep3ApprovedPath()
+    {
+        if (!string.IsNullOrWhiteSpace(Step3ExportedParcelsFeatureClassPath) && IsDatasetPathValid(Step3ExportedParcelsFeatureClassPath))
+        {
+            return Step3ExportedParcelsFeatureClassPath;
+        }
+
+        try
+        {
+            var step3 = PipelineStateManager.LoadStepOutput(_helperManager.PipelineStateFile, 3);
+            if (step3 != null && !string.IsNullOrWhiteSpace(step3.Path) && IsDatasetPathValid(step3.Path))
+            {
+                Step3ExportedParcelsFeatureClassPath = step3.Path;
+                Step3ExportedFeatureCount = step3.FeatureCount;
+                Step3ExportedTimestamp = step3.Timestamp;
+                return step3.Path;
+            }
+        }
+        catch { }
+
+        if (!string.IsNullOrWhiteSpace(GdbPath))
+        {
+            string candidate = Path.Combine(GdbPath, "PARCEL_Approved_Schema");
+            if (IsDatasetPathValid(candidate))
+            {
+                Step3ExportedParcelsFeatureClassPath = candidate;
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsDatasetPathValid(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        if (File.Exists(path)) return true;
+        int gdbIdx = path.IndexOf(".gdb", StringComparison.OrdinalIgnoreCase);
+        if (gdbIdx >= 0)
+        {
+            string gdbDir = path.Substring(0, gdbIdx + 4);
+            if (Directory.Exists(gdbDir))
+            {
+                try
+                {
+                    return GdbFeatureClassService.ItemExists(path);
+                }
+                catch
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private string? ResolveStep4LatestExportOrFail()
+    {
+        var state = ExportStateManager.LoadLatestExport(_helperManager.LastExportStateFile);
+        bool validState = state != null && !string.IsNullOrWhiteSpace(state.ParcelPath) && IsDatasetPathValid(state.ParcelPath);
+
+        if (validState && (!Step3ExportedTimestamp.HasValue || state!.Timestamp >= Step3ExportedTimestamp.Value))
+        {
+            IsWorkingFromMissing = false;
+            return state!.ParcelPath;
+        }
+
+        string? step3Path = ResolveStep3ApprovedPath();
+        if (!string.IsNullOrEmpty(step3Path) && IsDatasetPathValid(step3Path))
+        {
+            IsWorkingFromMissing = false;
+            return step3Path;
+        }
+
+        IsWorkingFromMissing = true;
+        WorkingFromMissingWarning = $"Latest export dataset not found. Please export Step 3 ('PARCEL_Approved_Schema') or use session data.";
+        ReportError(WorkingFromMissingWarning, "Missing Latest Export");
+        return null;
+    }
+
+    private string? ResolveStep4VerifiedStep3OutputOrFail()
+    {
+        string? targetPath = ResolveStep3ApprovedPath();
+
+        if (string.IsNullOrWhiteSpace(targetPath) || !IsDatasetPathValid(targetPath))
+        {
+            string missingMsg = "الخطوة 4: لم يتم العثور على مخرجات معتمدة من الخطوة 3 (Export Step 3).\n" +
+                $"المسار المطلوب: '{(targetPath ?? "غير محدد")}'.\n" +
+                "يرجى تصدير الخطوة 3 أولاً (Export Step 3) لإنتاج طبقة البارسلات المعتمدة، أو النقر على 'تغيير / استعراض' لاختيار مصدر بديل صراحة.";
+            StatusMessage = missingMsg;
+            ReportError(missingMsg, "مصدر الخطوة 4 مفقود");
+            ArcGIS.Desktop.Framework.Dialogs.MessageBox.Show(missingMsg, "تنبيه مصدر الخطوة 4", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+            return null;
+        }
+
+        var (ok, reason) = GdbFeatureClassService.VerifyPolygonFeatureClass(targetPath, 0, SelectedUtmZone);
+        if (!ok)
+        {
+            string verifyErr = $"الخطوة 4: فشل التحقق من صحة مخرجات الخطوة 3: {reason}";
+            ReportError(verifyErr, "خطأ في التحقق من مخرجات الخطوة 3");
+            return null;
+        }
+
+        if (Step3ExportedFeatureCount > 0)
+        {
+            var (cntOk, _) = GdbFeatureClassService.VerifyPolygonFeatureClass(targetPath, Step3ExportedFeatureCount, SelectedUtmZone);
+            if (!cntOk)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Step 4 Warning] Verified output count differs from recorded Step 3 count ({Step3ExportedFeatureCount}).");
+            }
+        }
+
+        return targetPath;
+    }
+
     public void RefreshLatestExportStatus()
     {
         try
         {
             var state = ExportStateManager.LoadLatestExport(_helperManager.LastExportStateFile);
-            if (state != null)
+            string? step3Path = ResolveStep3ApprovedPath();
+
+            if (CurrentStep == 4)
             {
-                HasLatestExport = true;
-                LatestExportPath = state.ExportFolder;
-                LatestExportTimestamp = state.Timestamp.ToString("yyyy-MM-dd HH:mm:ss");
-
-                ExportHistoryItems.Clear();
-                if (state.History != null)
+                if (!string.IsNullOrEmpty(step3Path) &&
+                    (state == null || string.IsNullOrEmpty(state.ParcelPath) ||
+                     (Step3ExportedTimestamp.HasValue && Step3ExportedTimestamp.Value >= state.Timestamp)))
                 {
-                    foreach (var h in state.History)
-                        ExportHistoryItems.Add(h);
-                }
-
-                if (!string.IsNullOrEmpty(state.ParcelPath) && File.Exists(state.ParcelPath))
-                {
+                    HasLatestExport = true;
+                    LatestExportPath = step3Path;
+                    LatestExportTimestamp = Step3ExportedTimestamp.HasValue
+                        ? Step3ExportedTimestamp.Value.ToString("yyyy-MM-dd HH:mm:ss")
+                        : (File.Exists(step3Path) ? File.GetLastWriteTime(step3Path).ToString("yyyy-MM-dd HH:mm:ss") : DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
                     IsWorkingFromMissing = false;
+                    IsEditedAfterExport = false;
+                    ShowEditedAfterExportBanner = false;
+                }
+                else if (state != null && !string.IsNullOrEmpty(state.ParcelPath) && IsDatasetPathValid(state.ParcelPath))
+                {
+                    HasLatestExport = true;
+                    LatestExportPath = state.ParcelPath;
+                    LatestExportTimestamp = state.Timestamp.ToString("yyyy-MM-dd HH:mm:ss");
+
+                    ExportHistoryItems.Clear();
+                    if (state.History != null)
+                    {
+                        foreach (var h in state.History)
+                            ExportHistoryItems.Add(h);
+                    }
+
                     bool parcelChanged = state.Datasets.TryGetValue("PARCEL", out var pDs) &&
                         ExportStateManager.HasPhysicalDatasetChanged(state.ParcelPath, pDs);
-                    bool borderChanged = !string.IsNullOrEmpty(state.BorderPath) &&
-                        File.Exists(state.BorderPath) &&
-                        state.Datasets.TryGetValue("Border", out var bDs) &&
-                        ExportStateManager.HasPhysicalDatasetChanged(state.BorderPath, bDs);
-
-                    IsEditedAfterExport = parcelChanged || borderChanged;
+                    IsEditedAfterExport = parcelChanged;
                     ShowEditedAfterExportBanner = IsEditedAfterExport;
+                    IsWorkingFromMissing = false;
                 }
                 else
                 {
-                    IsWorkingFromMissing = true;
-                    WorkingFromMissingWarning = $"Latest export dataset not found at '{state.ParcelPath}'.";
+                    HasLatestExport = false;
+                    LatestExportPath = string.Empty;
+                    LatestExportTimestamp = string.Empty;
+                    IsEditedAfterExport = false;
+                    ShowEditedAfterExportBanner = false;
+                    IsWorkingFromMissing = false;
                 }
             }
             else
             {
-                HasLatestExport = false;
-                LatestExportPath = string.Empty;
-                LatestExportTimestamp = string.Empty;
-                IsEditedAfterExport = false;
-                ShowEditedAfterExportBanner = false;
-                IsWorkingFromMissing = false;
+                if (state != null)
+                {
+                    HasLatestExport = true;
+                    LatestExportPath = state.ExportFolder;
+                    LatestExportTimestamp = state.Timestamp.ToString("yyyy-MM-dd HH:mm:ss");
+
+                    ExportHistoryItems.Clear();
+                    if (state.History != null)
+                    {
+                        foreach (var h in state.History)
+                            ExportHistoryItems.Add(h);
+                    }
+
+                    if (!string.IsNullOrEmpty(state.ParcelPath) && IsDatasetPathValid(state.ParcelPath))
+                    {
+                        IsWorkingFromMissing = false;
+                        bool parcelChanged = state.Datasets.TryGetValue("PARCEL", out var pDs) &&
+                            ExportStateManager.HasPhysicalDatasetChanged(state.ParcelPath, pDs);
+                        bool borderChanged = !string.IsNullOrEmpty(state.BorderPath) &&
+                            IsDatasetPathValid(state.BorderPath) &&
+                            state.Datasets.TryGetValue("Border", out var bDs) &&
+                            ExportStateManager.HasPhysicalDatasetChanged(state.BorderPath, bDs);
+
+                        IsEditedAfterExport = parcelChanged || borderChanged;
+                        ShowEditedAfterExportBanner = IsEditedAfterExport;
+                    }
+                    else
+                    {
+                        IsWorkingFromMissing = true;
+                        WorkingFromMissingWarning = $"Latest export dataset not found at '{state.ParcelPath}'.";
+                    }
+                }
+                else
+                {
+                    HasLatestExport = false;
+                    LatestExportPath = string.Empty;
+                    LatestExportTimestamp = string.Empty;
+                    IsEditedAfterExport = false;
+                    ShowEditedAfterExportBanner = false;
+                    IsWorkingFromMissing = false;
+                }
             }
+
             UpdateWorkingFromSummary();
         }
         catch (Exception ex)
@@ -4230,10 +4932,25 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
 
     private void UpdateWorkingFromSummary()
     {
-        if (WorkingSourceMode == "LatestExport" && HasLatestExport)
+        if (WorkingSourceMode == "LatestExport")
         {
-            string edited = IsEditedAfterExport ? "Yes" : "No";
-            WorkingFromSummary = $"Working from: {LatestExportPath} — exported {LatestExportTimestamp} — edited after export: {edited}";
+            if (HasLatestExport && !string.IsNullOrEmpty(LatestExportPath))
+            {
+                string edited = IsEditedAfterExport ? "Yes" : "No";
+                WorkingFromSummary = $"Working from: {LatestExportPath} — exported {LatestExportTimestamp} — edited after export: {edited}";
+            }
+            else
+            {
+                string? step3Path = ResolveStep3ApprovedPath();
+                if (!string.IsNullOrEmpty(step3Path))
+                {
+                    WorkingFromSummary = $"Working from: {step3Path} — (Step 3 Approved Schema)";
+                }
+                else
+                {
+                    WorkingFromSummary = "Working from: Latest Export (No prior export found — please export Step 3 first or use Session Data)";
+                }
+            }
         }
         else if (WorkingSourceMode == "UserOwnData")
         {
@@ -4250,15 +4967,57 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
                 WorkingFromSummary = "Working from: User Own Data (No file / layer selected)";
             }
         }
-        else
+        else // FromPreviousStep (جلسة العمل الحالية - Session data)
         {
-            if (GdbFeatureClassService.DatasetExists(GdbPath, "Cad_Dataset"))
+            if (CurrentStep == 4)
             {
-                WorkingFromSummary = $"Working from: GDB Feature Dataset 'Cad_Dataset' ({Path.GetFileName(GdbPath)}) — Editable Map Layers";
+                string? step3Path = ResolveStep3ApprovedPath();
+                if (!string.IsNullOrEmpty(step3Path))
+                {
+                    int cnt = Step3ExportedFeatureCount > 0 ? Step3ExportedFeatureCount : _parcels.Count;
+                    WorkingFromSummary = $"Working from: {step3Path} — ({cnt} Approved Parcels in Session)";
+                }
+                else if (_parcels.Count > 0)
+                {
+                    WorkingFromSummary = $"Working from: Current Session Approved Parcels ({_parcels.Count} Parcels in Memory)";
+                }
+                else
+                {
+                    WorkingFromSummary = "Working from: Current CAD Session Data (Step 3 Approved Parcels)";
+                }
+            }
+            else if (CurrentStep == 3)
+            {
+                if (_parcels.Count > 0)
+                {
+                    WorkingFromSummary = $"Working from: Current Session Extracted Parcels ({_parcels.Count} Parcels from Step 2)";
+                }
+                else
+                {
+                    WorkingFromSummary = "Working from: Current CAD Session Data (Step 2 Parcels)";
+                }
+            }
+            else if (CurrentStep == 2)
+            {
+                if (GdbFeatureClassService.DatasetExists(GdbPath, "Cad_Dataset"))
+                {
+                    WorkingFromSummary = $"Working from: GDB Feature Dataset 'Cad_Dataset' ({Path.GetFileName(GdbPath)}) — Editable Map Layers";
+                }
+                else
+                {
+                    WorkingFromSummary = "Working from: Current CAD Session Data (Step 1 CAD Layers)";
+                }
             }
             else
             {
-                WorkingFromSummary = "Working from: Current CAD Session Data (Step 2 / Step 3)";
+                if (GdbFeatureClassService.DatasetExists(GdbPath, "Cad_Dataset"))
+                {
+                    WorkingFromSummary = $"Working from: GDB Feature Dataset 'Cad_Dataset' ({Path.GetFileName(GdbPath)}) — Editable Map Layers";
+                }
+                else
+                {
+                    WorkingFromSummary = "Working from: Current CAD Session Data";
+                }
             }
         }
     }
@@ -4391,20 +5150,14 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
             if (openDlg.ShowDialog() == true && openDlg.Items.Any())
             {
                 string path = openDlg.Items.First().Path;
-                string folder = path;
-                if (path.Contains(".gdb", StringComparison.OrdinalIgnoreCase))
-                {
-                    int gdbIdx = path.IndexOf(".gdb", StringComparison.OrdinalIgnoreCase);
-                    folder = Path.GetDirectoryName(path.Substring(0, gdbIdx + 4)) ?? path;
-                }
-                else if (File.Exists(path))
-                {
-                    folder = Path.GetDirectoryName(path) ?? path;
-                }
-                LatestExportPath = folder;
+                LatestExportPath = path;
                 HasLatestExport = true;
                 WorkingSourceMode = "LatestExport";
-                RefreshLatestExportStatus();
+                LatestExportTimestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                IsEditedAfterExport = false;
+                ShowEditedAfterExportBanner = false;
+                IsWorkingFromMissing = false;
+                UpdateWorkingFromSummary();
                 return;
             }
         }
@@ -4417,11 +5170,14 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
         };
         if (dlg.ShowDialog() == true)
         {
-            string folder = Path.GetDirectoryName(dlg.FileName) ?? string.Empty;
-            LatestExportPath = folder;
+            LatestExportPath = dlg.FileName;
             HasLatestExport = true;
             WorkingSourceMode = "LatestExport";
-            RefreshLatestExportStatus();
+            LatestExportTimestamp = File.GetLastWriteTime(dlg.FileName).ToString("yyyy-MM-dd HH:mm:ss");
+            IsEditedAfterExport = false;
+            ShowEditedAfterExportBanner = false;
+            IsWorkingFromMissing = false;
+            UpdateWorkingFromSummary();
         }
     }
 
@@ -5297,13 +6053,15 @@ public class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contracts.DockP
             new CadLayerInfo { LayerName = "Text", EntityCount = 334, GeometryType = "Text", Color = "#F59E0B", RawCadText = "TEXT", DecodedArabicText = "نصوص المخطط", Role = LayerRole.PlotText, Category = "Text & Annotations", IsSelected = true },
             new CadLayerInfo { LayerName = "ترقيم تجاري الاحياء", EntityCount = 110, GeometryType = "Text", Color = "#F59E0B", RawCadText = "COM_NUM", DecodedArabicText = "ترقيم تجاري", Role = LayerRole.PlotText, Category = "Text & Annotations", IsSelected = true },
 
-            // Roads & References (All set to Ignore / IsSelected = false)
-            new CadLayerInfo { LayerName = "boundary roads", EntityCount = 13, GeometryType = "Line", Color = "#94A3B8", RawCadText = "STR_30", DecodedArabicText = "شارع عرض 30 متر", Role = LayerRole.Ignore, Category = "Roads & References", IsSelected = false },
-            new CadLayerInfo { LayerName = "pathes", EntityCount = 104, GeometryType = "Line", Color = "#94A3B8", RawCadText = "PATH_6", DecodedArabicText = "ممر مشاة عرض 6 متر", Role = LayerRole.Ignore, Category = "Roads & References", IsSelected = false },
-            new CadLayerInfo { LayerName = "water canals", EntityCount = 153, GeometryType = "Polygon", Color = "#38BDF8", RawCadText = "CANAL", DecodedArabicText = "قناة مائية", Role = LayerRole.Ignore, Category = "Roads & References", IsSelected = false },
-            new CadLayerInfo { LayerName = "التنظيم", EntityCount = 2, GeometryType = "Line", Color = "#94A3B8", RawCadText = "SETBACK", DecodedArabicText = "خط تنظيم", Role = LayerRole.Ignore, Category = "Roads & References", IsSelected = false },
-            new CadLayerInfo { LayerName = "Deed", EntityCount = 34, GeometryType = "Line", Color = "#94A3B8", RawCadText = "DEED", DecodedArabicText = "صك ملكية", Role = LayerRole.Ignore, Category = "Roads & References", IsSelected = false },
-            new CadLayerInfo { LayerName = "0", EntityCount = 6347, GeometryType = "Polygon", Color = "#64748B", RawCadText = "0", DecodedArabicText = "طبقة افتراضية", Role = LayerRole.Ignore, Category = "Roads & References", IsSelected = false }
+            // Streets & Corridors (Mapped to Sub-Parcels / Utilities)
+            new CadLayerInfo { LayerName = "boundary roads", EntityCount = 13, GeometryType = "Line", Color = "#94A3B8", RawCadText = "STR_30", DecodedArabicText = "شارع عرض 30 متر", Role = LayerRole.Street, Category = "Sub-Parcels / Utilities", IsSelected = true },
+            new CadLayerInfo { LayerName = "pathes", EntityCount = 104, GeometryType = "Line", Color = "#94A3B8", RawCadText = "PATH_6", DecodedArabicText = "ممر مشاة عرض 6 متر", Role = LayerRole.Street, Category = "Sub-Parcels / Utilities", IsSelected = true },
+
+            // Ignore Layers (All set to Ignore / IsSelected = false)
+            new CadLayerInfo { LayerName = "water canals", EntityCount = 153, GeometryType = "Polygon", Color = "#38BDF8", RawCadText = "CANAL", DecodedArabicText = "قناة مائية", Role = LayerRole.Ignore, Category = "Ignore Layers", IsSelected = false },
+            new CadLayerInfo { LayerName = "التنظيم", EntityCount = 2, GeometryType = "Line", Color = "#94A3B8", RawCadText = "SETBACK", DecodedArabicText = "خط تنظيم", Role = LayerRole.Ignore, Category = "Ignore Layers", IsSelected = false },
+            new CadLayerInfo { LayerName = "Deed", EntityCount = 34, GeometryType = "Line", Color = "#94A3B8", RawCadText = "DEED", DecodedArabicText = "صك ملكية", Role = LayerRole.Ignore, Category = "Ignore Layers", IsSelected = false },
+            new CadLayerInfo { LayerName = "0", EntityCount = 6347, GeometryType = "Polygon", Color = "#64748B", RawCadText = "0", DecodedArabicText = "طبقة افتراضية", Role = LayerRole.Ignore, Category = "Ignore Layers", IsSelected = false }
         };
 
         foreach (var s in seeds)

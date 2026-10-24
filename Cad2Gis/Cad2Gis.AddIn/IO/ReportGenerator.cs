@@ -104,7 +104,9 @@ public static class ReportGenerator
         var wsInferred = writer.AddSheet("Inferred Borders", new[] { "Plot ID", "Direction", "Measured Width (m)", "Suggested Width (m)", "Description", "Border Type", "Rule Used", "Rays Count" });
         foreach (var b in borders.Where(b => b.IsInferred))
         {
-            wsInferred.AddRow(b.PlotId, b.BorderNameArabic, b.MeasuredWidth?.ToString("F1") ?? "UNKNOWN", b.SuggestedWidth?.ToString("F1") ?? "-", b.Descriptio, b.BorderType, b.InferenceRule ?? "Ray Sensing", b.RayLengths.Count);
+            string descDisplay = b.IsUnknown ? "UNKNOWN" : (string.IsNullOrEmpty(b.Descriptio) ? "-" : b.Descriptio);
+            string typeDisplay = b.IsUnknown ? "UNKNOWN" : (string.IsNullOrEmpty(b.BorderType) ? "-" : b.BorderType);
+            wsInferred.AddRow(b.PlotId, b.BorderNameArabic, b.MeasuredWidth?.ToString("F1") ?? "UNKNOWN", b.SuggestedWidth?.ToString("F1") ?? "-", descDisplay, typeDisplay, b.InferenceRule ?? "Ray Sensing", b.RayLengths.Count);
         }
 
         writer.Save(path);

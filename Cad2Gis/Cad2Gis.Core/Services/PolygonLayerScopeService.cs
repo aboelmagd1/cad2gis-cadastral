@@ -60,4 +60,21 @@ public static class PolygonLayerScopeService
     }
 
     public static bool IsLayerEligible(CadLayerInfo? layer, string? scope) => IsLayerEligible(layer, scope, false);
+
+    /// <summary>
+    /// Builds a sanitized, case-insensitive SQL IN expression for the CAD Layer field:
+    /// UPPER(Layer) IN ('LAYER1','LAYER2')
+    /// Single quotes in layer names are escaped by doubling them (' -> '').
+    /// </summary>
+    public static string BuildLayerWhere(IEnumerable<string> layers)
+    {
+        if (layers == null) return "1=0";
+        var escaped = layers
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .Select(l => "'" + l.Trim().Replace("'", "''").ToUpperInvariant() + "'")
+            .Distinct()
+            .ToList();
+        if (escaped.Count == 0) return "1=0";
+        return $"UPPER(Layer) IN ({string.Join(",", escaped)})";
+    }
 }

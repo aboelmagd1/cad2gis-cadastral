@@ -41,6 +41,8 @@ public class CurvePolygonRing
 {
     public List<CoreBoundarySegment> Segments { get; set; } = new();
     public string SourceLayer { get; set; } = string.Empty;
+    public List<string> LayerNames { get; set; } = new();
+    public bool IsMixedLayers { get; set; } = false;
     public string Category { get; set; } = "Main Parcels";
     public double Area { get; set; }
     public double Perimeter { get; set; }
@@ -151,6 +153,8 @@ public static class CurvePreservingPolygonizerService
             {
                 Segments = new List<CoreBoundarySegment>(closed.Segments),
                 SourceLayer = closed.LayerName,
+                LayerNames = new List<string> { closed.LayerName },
+                IsMixedLayers = false,
                 Category = closed.Category,
                 Area = area,
                 Perimeter = perimeter,
@@ -414,12 +418,25 @@ public static class CurvePreservingPolygonizerService
                         if (!isDup)
                         {
                             double perim = ringSegments.Sum(s => s.Length);
-                            string dominantLayer = participatingLayers.FirstOrDefault() ?? "CAD";
+                            var lengthByLayer = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+                            foreach (var h in cycle)
+                            {
+                                var poolSeg = pool[h.SegmentIndex];
+                                lengthByLayer[poolSeg.LayerName] = lengthByLayer.TryGetValue(poolSeg.LayerName, out var cur)
+                                    ? cur + poolSeg.Segment.Length
+                                    : poolSeg.Segment.Length;
+                            }
+
+                            string dominantLayer = lengthByLayer.OrderByDescending(kv => kv.Value).FirstOrDefault().Key ?? "CAD";
+                            var contributing = lengthByLayer.Where(kv => kv.Value > 1e-4).Select(kv => kv.Key).ToList();
+                            bool isMixed = lengthByLayer.Values.Count(v => perim > 0 && (v / perim) > 0.10) > 1;
 
                             var ring = new CurvePolygonRing
                             {
                                 Segments = ringSegments,
                                 SourceLayer = dominantLayer,
+                                LayerNames = contributing,
+                                IsMixedLayers = isMixed,
                                 Category = pool[cycle[0].SegmentIndex].Category,
                                 Area = area,
                                 Perimeter = perim,

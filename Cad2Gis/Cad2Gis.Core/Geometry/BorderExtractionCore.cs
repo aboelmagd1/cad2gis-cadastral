@@ -267,13 +267,25 @@ public static class BorderExtractionCore
         int segCount = segments.Count;
 
         // Determine polygon winding and inside-orientation
-        // Signed Area of polygon ring using chord endpoints
+        // Signed Area of polygon ring using chord endpoints + circular arc contributions (P4.2)
         double signedArea = 0;
         for (int i = 0; i < segCount; i++)
         {
             var p1 = segments[i].Start;
             var p2 = segments[i].End;
             signedArea += (p1.X * p2.Y) - (p2.X * p1.Y);
+
+            if (segments[i].Type == CurveType.CircularArc && segments[i].Radius is double r && r > 1e-6)
+            {
+                double chordLen = p1.DistanceTo(p2);
+                double halfAngle = Math.Asin(Math.Min(1.0, Math.Max(0.0, (chordLen / 2.0) / r)));
+                double theta = 2.0 * halfAngle;
+                double capArea = 0.5 * r * r * (theta - Math.Sin(theta));
+
+                bool isCcwArc = segments[i].IsCounterClockwise ?? true;
+                // In shoelace sum, CCW (left-bulging) adds positive area, CW (right-bulging) adds negative area
+                signedArea += (isCcwArc ? 2.0 : -2.0) * capArea;
+            }
         }
 
         // In standard GIS:
@@ -306,7 +318,8 @@ public static class BorderExtractionCore
         }
         else if (splitIndices.Count == 0 && segCount > 0)
         {
-            splitIndices.Add(0);
+            for (int i = 0; i < segCount; i++) splitIndices.Add(i);
+            result.AuditLog.Add($"Ring {ringIndex}: No corner split points found on {segCount}-segment ring; split at segment boundaries.");
         }
 
         var pieces = new List<CoreBoundaryPiece>();
@@ -317,11 +330,14 @@ public static class BorderExtractionCore
 
             var piece = new CoreBoundaryPiece { RingIndex = ringIndex };
             int currSeg = startVtx;
-            while (currSeg != endVtx)
+            int walked = 0;
+            do
             {
                 piece.Segments.Add(segments[currSeg]);
                 currSeg = (currSeg + 1) % segCount;
+                walked++;
             }
+            while (walked < segCount && (currSeg != endVtx || splitIndices.Count == 1));
 
             if (piece.Segments.Count > 0)
             {

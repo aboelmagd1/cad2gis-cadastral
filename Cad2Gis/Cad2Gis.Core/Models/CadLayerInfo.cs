@@ -161,14 +161,14 @@ public class CadLayerInfo : INotifyPropertyChanged
             case LayerRole.Boundary:
                 return "Main Parcels";
             case LayerRole.Service:
+            case LayerRole.Street:
                 return "Sub-Parcels / Utilities";
             case LayerRole.PlotText:
             case LayerRole.UsageText:
             case LayerRole.Dimensions:
                 return "Text & Annotations";
-            case LayerRole.Street:
             case LayerRole.WaterChannel:
-                return "Roads & References";
+                return "Ignore Layers";
         }
 
         string l = (layerName ?? "").ToLowerInvariant().Trim();
@@ -180,19 +180,19 @@ public class CadLayerInfo : INotifyPropertyChanged
             l.Contains("dim") || l.Contains("meas") || l.Contains("ابعاد") || l.Contains("أبعاد") || l.Contains("شطف") || l.Contains("كتابة"))
             return "Text & Annotations";
 
-        // 2. Roads & Water Channels
-        if (l.Contains("road") || l.Contains("street") || l.Contains("str") || l.Contains("path") || l.Contains("canal") || l.Contains("water") ||
-            l.Contains("شوارع") || l.Contains("ممرات") || l.Contains("طريق") || l.Contains("شارع") || l.Contains("قنوات") || l.Contains("تنظيم") || l.Contains("deed"))
-            return "Roads & References";
+        // 2. Corridors, Streets & Sub-Parcels / Utilities / Services
+        // Streets and Corridors (ممرات والشوارع الفرعية) belong to Sub-Parcels / Utilities tab, NOT main parcel!
+        if (l.Contains("road") || l.Contains("street") || l.Contains("str") || l.Contains("path") ||
+            l.Contains("شوارع") || l.Contains("ممرات") || l.Contains("ممر") || l.Contains("شارع"))
+            return "Sub-Parcels / Utilities";
 
-        // 3. Sub-Parcels / Utilities / Services
         if (trimmed == "msq" || trimmed.StartsWith("msq") || trimmed == "kh" || trimmed.StartsWith("kh") ||
             l.Contains("serv") || l.Contains("util") || l.Contains("park") || l.Contains("garden") || l.Contains("mosq") || l.Contains("room") ||
             l.Contains("خدمات") || l.Contains("خدمة") || l.Contains("مرفق") || l.Contains("مرافق") || l.Contains("حدائق") || l.Contains("حديقة") ||
             l.Contains("مساجد") || l.Contains("مسجد") || l.Contains("parking") || l.Contains("مواقف") || l.Contains("حكومي") || l.Contains("hospital") || l.Contains("كهرباء"))
             return "Sub-Parcels / Utilities";
 
-        // 4. Main Parcels & Boundaries
+        // 3. Main Parcels & Boundaries
         if (trimmed == "s" || trimmed == "gr" || trimmed == "t" || trimmed == "st" ||
             trimmed.StartsWith("s1") || trimmed.StartsWith("s2") || trimmed.StartsWith("s3") || trimmed.StartsWith("s4") || trimmed.StartsWith("s5") || trimmed.StartsWith("s_") || trimmed.StartsWith("s-") ||
             trimmed.StartsWith("t1") || trimmed.StartsWith("t2") || trimmed.StartsWith("t3") || trimmed.StartsWith("t_") || trimmed.StartsWith("t-") ||
@@ -203,7 +203,8 @@ public class CadLayerInfo : INotifyPropertyChanged
             l.Contains("سكني") || l.Contains("تجاري") || l.Contains("استثماري") || l.Contains("الاوجه") || l.Contains("الاجهه") || l.Contains("واجهات"))
             return "Main Parcels";
 
-        return "Roads & References";
+        // 4. Tab 4: Ignore Layers (التجاهل فقط)
+        return "Ignore Layers";
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

@@ -90,17 +90,21 @@ public static class WidthInferenceService
         var validHits = new List<RayHitResult>();
         var allRayDistances = new List<double>();
 
+        const double rayOffsetMeters = 0.05;
+
         foreach (double frac in fractions)
         {
             var origin = dimensionSegment.PointAt(frac);
             // Start ray slightly outside the boundary (0.05m epsilon) to avoid self-hitting
-            var rayStart = origin + outwardNormal * 0.05;
+            var rayStart = origin + outwardNormal * rayOffsetMeters;
 
             var hit = CastRay(rayStart, outwardNormal, options.MaxSearchDistance, obstacleSegments);
             if (hit.Hit)
             {
+                // Add the start offset back so width is measured from the actual parcel boundary (P5.3)
+                double boundaryDist = hit.Distance + rayOffsetMeters;
                 validHits.Add(hit);
-                allRayDistances.Add(hit.Distance);
+                allRayDistances.Add(boundaryDist);
             }
             else
             {
@@ -110,8 +114,9 @@ public static class WidthInferenceService
                 var retryHit = CastRay(retryStart, outwardNormal, options.MaxSearchDistance, obstacleSegments);
                 if (retryHit.Hit)
                 {
+                    double boundaryDist = retryHit.Distance + rayOffsetMeters;
                     validHits.Add(retryHit);
-                    allRayDistances.Add(retryHit.Distance);
+                    allRayDistances.Add(boundaryDist);
                 }
             }
         }
@@ -120,14 +125,25 @@ public static class WidthInferenceService
 
         if (validHits.Count > 0)
         {
-            // Median hit distance
+            // P5.3: Define median properly (mean of two middle values for an even count)
             var sorted = allRayDistances.OrderBy(d => d).ToList();
-            double medianDist = sorted[sorted.Count / 2];
-            double roundedWidth = Math.Round(medianDist);
+            double medianDist;
+            if (sorted.Count % 2 == 1)
+            {
+                medianDist = sorted[sorted.Count / 2];
+            }
+            else
+            {
+                medianDist = (sorted[(sorted.Count / 2) - 1] + sorted[sorted.Count / 2]) / 2.0;
+            }
+
+            // P5.2: Use MidpointRounding.AwayFromZero instead of Banker's rounding
+            double roundedWidth = Math.Round(medianDist, MidpointRounding.AwayFromZero);
 
             border.IsInferred = true;
+            border.IsUnknown = false;
             border.MeasuredWidth = roundedWidth;
-            border.RayLength = Math.Round(medianDist, 2);
+            border.RayLength = Math.Round(medianDist, 2, MidpointRounding.AwayFromZero);
             border.SuggestedWidth = FindNearestStandardWidth(roundedWidth, options.StandardWidths);
             border.HitElementId = validHits[0].HitElementId ?? "FacingEdge";
 
@@ -146,14 +162,16 @@ public static class WidthInferenceService
         }
         else
         {
-            // No hit within max distance
+            // P5.1: Keep state in flag, not in deliverable data. Export blank for BORDERTYPE and DESCRIPTIO.
             border.IsInferred = true;
+            border.IsUnknown = true;
+            border.ReviewStatus = "RequiresReview";
             border.MeasuredWidth = null;
             border.SuggestedWidth = null;
             border.RayLength = null;
             border.HitElementId = null;
-            border.BorderType = "UNKNOWN";
-            border.Descriptio = "UNKNOWN";
+            border.BorderType = "";
+            border.Descriptio = "";
             border.InferenceRule = $"No obstacle hit within {options.MaxSearchDistance}m -> UNKNOWN";
         }
     }

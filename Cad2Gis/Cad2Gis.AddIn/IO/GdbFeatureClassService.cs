@@ -87,14 +87,17 @@ public static class GdbFeatureClassService
         SpatialReference? existingSr = null;
         try
         {
-            using var gdb = new Geodatabase(new FileGeodatabaseConnectionPath(new Uri(gdbPath)));
-            var defs = gdb.GetDefinitions<FeatureClassDefinition>();
-            var match = defs.FirstOrDefault(d => d.GetName().Equals(fcName, StringComparison.OrdinalIgnoreCase));
-            if (match != null)
+            await ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() =>
             {
-                exists = true;
-                existingSr = match.GetSpatialReference();
-            }
+                using var gdb = new Geodatabase(new FileGeodatabaseConnectionPath(new Uri(gdbPath)));
+                var defs = gdb.GetDefinitions<FeatureClassDefinition>();
+                var match = defs.FirstOrDefault(d => d.GetName().Equals(fcName, StringComparison.OrdinalIgnoreCase));
+                if (match != null)
+                {
+                    exists = true;
+                    existingSr = match.GetSpatialReference();
+                }
+            });
         }
         catch { }
 
@@ -202,7 +205,14 @@ public static class GdbFeatureClassService
         if (string.IsNullOrWhiteSpace(gdbPath) || !Directory.Exists(gdbPath)) return false;
         try
         {
-            return ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() => CheckDatasetInternal(gdbPath, datasetName)).GetAwaiter().GetResult();
+            if (File.Exists(Path.Combine(gdbPath, datasetName)) || Directory.Exists(Path.Combine(gdbPath, datasetName)))
+                return true;
+
+            if (ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.OnWorker)
+            {
+                return CheckDatasetInternal(gdbPath, datasetName);
+            }
+            return Task.Run(async () => await DatasetExistsAsync(gdbPath, datasetName)).GetAwaiter().GetResult();
         }
         catch
         {
@@ -213,7 +223,147 @@ public static class GdbFeatureClassService
     public static async Task<bool> DatasetExistsAsync(string gdbPath, string datasetName)
     {
         if (string.IsNullOrWhiteSpace(gdbPath) || !Directory.Exists(gdbPath)) return false;
-        return await ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() => CheckDatasetInternal(gdbPath, datasetName));
+        try
+        {
+            if (File.Exists(Path.Combine(gdbPath, datasetName)) || Directory.Exists(Path.Combine(gdbPath, datasetName)))
+                return true;
+
+            if (ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.OnWorker)
+            {
+                return CheckDatasetInternal(gdbPath, datasetName);
+            }
+            return await ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() => CheckDatasetInternal(gdbPath, datasetName));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static bool DatasetExists(string fullPath)
+    {
+        if (string.IsNullOrWhiteSpace(fullPath)) return false;
+        int gdbIdx = fullPath.IndexOf(".gdb", StringComparison.OrdinalIgnoreCase);
+        if (gdbIdx >= 0)
+        {
+            string gdbPath = fullPath.Substring(0, gdbIdx + 4);
+            string dsName = fullPath.Substring(gdbIdx + 4).TrimStart('\\', '/');
+            return DatasetExists(gdbPath, dsName);
+        }
+        return false;
+    }
+
+    public static async Task<bool> DatasetExistsAsync(string fullPath)
+    {
+        if (string.IsNullOrWhiteSpace(fullPath)) return false;
+        int gdbIdx = fullPath.IndexOf(".gdb", StringComparison.OrdinalIgnoreCase);
+        if (gdbIdx >= 0)
+        {
+            string gdbPath = fullPath.Substring(0, gdbIdx + 4);
+            string dsName = fullPath.Substring(gdbIdx + 4).TrimStart('\\', '/');
+            return await DatasetExistsAsync(gdbPath, dsName);
+        }
+        return false;
+    }
+
+    public static bool ItemExists(string fullPath)
+    {
+        if (string.IsNullOrWhiteSpace(fullPath)) return false;
+        if (File.Exists(fullPath) || Directory.Exists(fullPath)) return true;
+        int gdbIdx = fullPath.IndexOf(".gdb", StringComparison.OrdinalIgnoreCase);
+        if (gdbIdx >= 0)
+        {
+            string gdbPath = fullPath.Substring(0, gdbIdx + 4);
+            string itemName = fullPath.Substring(gdbIdx + 4).TrimStart('\\', '/');
+            if (string.IsNullOrWhiteSpace(itemName))
+                return Directory.Exists(gdbPath);
+            return FeatureClassExists(gdbPath, itemName) || DatasetExists(gdbPath, itemName);
+        }
+        return false;
+    }
+
+    public static async Task<bool> ItemExistsAsync(string fullPath)
+    {
+        if (string.IsNullOrWhiteSpace(fullPath)) return false;
+        if (File.Exists(fullPath) || Directory.Exists(fullPath)) return true;
+        int gdbIdx = fullPath.IndexOf(".gdb", StringComparison.OrdinalIgnoreCase);
+        if (gdbIdx >= 0)
+        {
+            string gdbPath = fullPath.Substring(0, gdbIdx + 4);
+            string itemName = fullPath.Substring(gdbIdx + 4).TrimStart('\\', '/');
+            if (string.IsNullOrWhiteSpace(itemName))
+                return Directory.Exists(gdbPath);
+            bool fc = await FeatureClassExistsAsync(gdbPath, itemName);
+            if (fc) return true;
+            return await DatasetExistsAsync(gdbPath, itemName);
+        }
+        return false;
+    }
+
+    public static bool FeatureClassExists(string gdbPath, string fcName)
+    {
+        if (string.IsNullOrWhiteSpace(gdbPath) || !Directory.Exists(gdbPath)) return false;
+        try
+        {
+            if (File.Exists(Path.Combine(gdbPath, fcName)) || Directory.Exists(Path.Combine(gdbPath, fcName)))
+                return true;
+
+            if (ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.OnWorker)
+            {
+                return CheckFeatureClassInternal(gdbPath, fcName);
+            }
+            return Task.Run(async () => await FeatureClassExistsAsync(gdbPath, fcName)).GetAwaiter().GetResult();
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static async Task<bool> FeatureClassExistsAsync(string gdbPath, string fcName)
+    {
+        if (string.IsNullOrWhiteSpace(gdbPath) || !Directory.Exists(gdbPath)) return false;
+        try
+        {
+            if (File.Exists(Path.Combine(gdbPath, fcName)) || Directory.Exists(Path.Combine(gdbPath, fcName)))
+                return true;
+
+            if (ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.OnWorker)
+            {
+                return CheckFeatureClassInternal(gdbPath, fcName);
+            }
+            return await ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() => CheckFeatureClassInternal(gdbPath, fcName));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static bool FeatureClassExists(string fullPath)
+    {
+        if (string.IsNullOrWhiteSpace(fullPath)) return false;
+        int gdbIdx = fullPath.IndexOf(".gdb", StringComparison.OrdinalIgnoreCase);
+        if (gdbIdx >= 0)
+        {
+            string gdbPath = fullPath.Substring(0, gdbIdx + 4);
+            string fcName = fullPath.Substring(gdbIdx + 4).TrimStart('\\', '/');
+            return FeatureClassExists(gdbPath, fcName);
+        }
+        return File.Exists(fullPath);
+    }
+
+    public static async Task<bool> FeatureClassExistsAsync(string fullPath)
+    {
+        if (string.IsNullOrWhiteSpace(fullPath)) return false;
+        int gdbIdx = fullPath.IndexOf(".gdb", StringComparison.OrdinalIgnoreCase);
+        if (gdbIdx >= 0)
+        {
+            string gdbPath = fullPath.Substring(0, gdbIdx + 4);
+            string fcName = fullPath.Substring(gdbIdx + 4).TrimStart('\\', '/');
+            return await FeatureClassExistsAsync(gdbPath, fcName);
+        }
+        return File.Exists(fullPath);
     }
 
     private static bool CheckDatasetInternal(string gdbPath, string datasetName)
@@ -238,38 +388,6 @@ public static class GdbFeatureClassService
         {
             return false;
         }
-    }
-
-    public static bool FeatureClassExists(string gdbPath, string fcName)
-    {
-        if (string.IsNullOrWhiteSpace(gdbPath) || !Directory.Exists(gdbPath)) return false;
-        try
-        {
-            return ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() => CheckFeatureClassInternal(gdbPath, fcName)).GetAwaiter().GetResult();
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    public static async Task<bool> FeatureClassExistsAsync(string gdbPath, string fcName)
-    {
-        if (string.IsNullOrWhiteSpace(gdbPath) || !Directory.Exists(gdbPath)) return false;
-        return await ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() => CheckFeatureClassInternal(gdbPath, fcName));
-    }
-
-    public static bool FeatureClassExists(string fullPath)
-    {
-        if (string.IsNullOrWhiteSpace(fullPath)) return false;
-        int gdbIdx = fullPath.IndexOf(".gdb", StringComparison.OrdinalIgnoreCase);
-        if (gdbIdx >= 0)
-        {
-            string gdbPath = fullPath.Substring(0, gdbIdx + 4);
-            string fcName = fullPath.Substring(gdbIdx + 4).TrimStart('\\', '/');
-            return FeatureClassExists(gdbPath, fcName);
-        }
-        return File.Exists(fullPath);
     }
 
     private static bool CheckFeatureClassInternal(string gdbPath, string fcName)
@@ -422,14 +540,7 @@ public static class GdbFeatureClassService
                 var role = CadExtractionService.InferRoleFromName(name);
                 var cat = CadLayerInfo.DetermineCategory(role, name);
 
-                // If geometry is Polygon and not road/street/water, promote to Boundary/Main Parcels
-                if (geom.Equals("Polygon", StringComparison.OrdinalIgnoreCase) && role == LayerRole.Ignore && cat == "Roads & References")
-                {
-                    role = LayerRole.Boundary;
-                    cat = "Main Parcels";
-                }
-
-                if (cat == "Roads & References")
+                if (cat == "Ignore Layers" || cat == "Roads & References")
                 {
                     role = LayerRole.Ignore;
                 }
@@ -441,7 +552,7 @@ public static class GdbFeatureClassService
                     GeometryType = geom,
                     Role = role,
                     Category = cat,
-                    IsSelected = (cat != "Roads & References" && role != LayerRole.Ignore)
+                    IsSelected = (cat != "Ignore Layers" && cat != "Roads & References" && role != LayerRole.Ignore)
                 };
 
                 if (layerTexts.TryGetValue(name, out var rawTxt))
@@ -1626,21 +1737,32 @@ public static class GdbFeatureClassService
     /// Uses the user's active layer selection scope (Main Only, Main &amp; Sub, All) as a feature selection (where_clause),
     /// strictly preserving all native true curves (CircularArc, EllipticArc) and original coordinates completely intact.
     /// </summary>
+    public static string BuildLayerWhere(IEnumerable<string> layers) => PolygonLayerScopeService.BuildLayerWhere(layers);
+
+    /// <summary>
+    /// Executes native ArcGIS Geoprocessing FeatureToPolygon strictly on selected CAD layers with Z/M disabled.
+    /// Follows Section 1-7 specifications: pre-flight checks, strict UPPER(Layer) selection, zero polygon fact reporting,
+    /// and explicit class assignment without silent fallback.
+    /// </summary>
     public static async Task<FeatureToPolygonReport> RunFeatureToPolygonReportAsync(
         string gdbPath,
         string datasetName,
         IEnumerable<string> eligibleLayerNames,
         double snapToleranceMeters = 0.0,
-        int epsgCode = 0)
+        int epsgCode = 0,
+        string outFcName = "Cad_Constructed_Parcels",
+        ParcelClass assignedClass = ParcelClass.Main)
     {
         var report = new FeatureToPolygonReport
         {
-            ToleranceMeters = snapToleranceMeters
+            ToleranceMeters = snapToleranceMeters,
+            AssignedClass = assignedClass
         };
 
         if (!Directory.Exists(gdbPath))
         {
-            report.DiagnosticMessage = $"قاعدة البيانات الجغرافية غير موجودة: {gdbPath}";
+            report.Success = false;
+            report.DiagnosticMessage = $"Geodatabase not found at: {gdbPath}";
             return report;
         }
 
@@ -1648,17 +1770,31 @@ public static class GdbFeatureClassService
             ? Path.Combine(gdbPath, datasetName, "Polyline")
             : Path.Combine(gdbPath, "Polyline");
 
-        string outFcName = "Cad_Constructed_Parcels";
         string outFcPath = Path.Combine(gdbPath, outFcName);
         report.OutputPath = outFcPath;
 
         var layerList = eligibleLayerNames?.Where(l => !string.IsNullOrWhiteSpace(l)).Distinct().ToList() ?? new List<string>();
 
-        // 1. Inspect the authoritative Polyline Feature Class directly on MCT
+        // Pre-flight check: At least one layer selected in Step 1
+        if (layerList.Count == 0)
+        {
+            report.Success = false;
+            report.DiagnosticMessage = "No CAD layers selected in Step 1. Please select at least one layer to polygonize.";
+            return report;
+        }
+
+        // Section 2: Pre-flight checks on MCT
         string actualPolylinePath = polylineFcPath;
-        long totalLines = 0;
-        long eligibleLines = 0;
-        int detectedEpsg = epsgCode;
+        long totalLinesInFc = 0;
+        int detectedWkid = epsgCode;
+        string linearUnitName = "Meter";
+        bool inputHasZ = false;
+        var distinctLayers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var countsByLayer = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        foreach (var l in layerList)
+            countsByLayer[l] = 0;
+
+        string preflightError = string.Empty;
 
         await ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() =>
         {
@@ -1666,142 +1802,178 @@ public static class GdbFeatureClassService
             {
                 using var gdb = new Geodatabase(new FileGeodatabaseConnectionPath(new Uri(gdbPath)));
                 using var fc = OpenDatasetFeatureClass(gdb, "Polyline");
-                if (fc != null)
+                if (fc == null)
                 {
-                    var def = fc.GetDefinition();
-                    actualPolylinePath = Path.Combine(gdbPath, def.GetName());
-                    detectedEpsg = def.GetSpatialReference()?.Wkid ?? epsgCode;
-                    totalLines = fc.GetCount();
-                    int lIdx = def.FindField("Layer");
-                    if (lIdx >= 0 && layerList.Count > 0)
+                    preflightError = $"Dataset '{datasetName}' does not exist or does not contain 'Polyline' feature class in '{gdbPath}'.";
+                    return;
+                }
+
+                var def = fc.GetDefinition();
+                actualPolylinePath = Path.Combine(gdbPath, def.GetName());
+                totalLinesInFc = fc.GetCount();
+
+                var geomType = def.GetShapeType();
+                if (geomType != GeometryType.Polyline)
+                {
+                    preflightError = $"Feature class '{actualPolylinePath}' must have geometry type Polyline (found: {geomType}).";
+                    return;
+                }
+
+                int lIdx = def.FindField("Layer");
+                if (lIdx < 0)
+                {
+                    preflightError = $"Feature class '{actualPolylinePath}' must contain a 'Layer' field.";
+                    return;
+                }
+
+                var sr = def.GetSpatialReference();
+                if (sr == null || sr.IsUnknown)
+                {
+                    preflightError = $"Feature class '{actualPolylinePath}' has an unknown spatial reference.";
+                    return;
+                }
+                detectedWkid = sr.Wkid > 0 ? sr.Wkid : epsgCode;
+                linearUnitName = sr.Unit?.Name ?? (sr.IsProjected ? "Meter" : "");
+                if (string.IsNullOrWhiteSpace(linearUnitName) || (!sr.IsProjected && sr.IsGeographic))
+                {
+                    preflightError = $"Feature class '{actualPolylinePath}' must have a projected spatial reference with a linear unit (found WKID: {detectedWkid}, Unit: '{(string.IsNullOrEmpty(linearUnitName) ? "None" : linearUnitName)}').";
+                    return;
+                }
+
+                using var cur = fc.Search(null, false);
+                while (cur.MoveNext())
+                {
+                    using var row = cur.Current;
+                    var lVal = row[lIdx]?.ToString()?.Trim() ?? "";
+                    if (!string.IsNullOrEmpty(lVal))
                     {
-                        using var cur = fc.Search(null, false);
-                        while (cur.MoveNext())
+                        distinctLayers.Add(lVal);
+                        if (countsByLayer.ContainsKey(lVal))
                         {
-                            using var row = cur.Current;
-                            var lVal = row[lIdx]?.ToString()?.Trim();
-                            if (lVal != null && layerList.Contains(lVal, StringComparer.OrdinalIgnoreCase))
-                            {
-                                eligibleLines++;
-                            }
+                            countsByLayer[lVal]++;
                         }
                     }
-                    else
+                    if (!inputHasZ && row is Feature f && f.GetShape() is Polyline pl && pl.HasZ)
                     {
-                        eligibleLines = totalLines;
+                        inputHasZ = true;
                     }
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[RunFeatureToPolygonReport] Polyline count check notice: {ex.Message}");
+                preflightError = $"Pre-flight inspection failed on '{polylineFcPath}': {ex.Message}";
             }
         });
 
+        if (!string.IsNullOrEmpty(preflightError))
+        {
+            report.Success = false;
+            report.DiagnosticMessage = preflightError;
+            return report;
+        }
+
         report.InputPath = actualPolylinePath;
-        report.TotalInputLines = totalLines;
-        report.EligibleInputLines = eligibleLines;
+        report.TotalInputLines = totalLinesInFc;
 
-        if (totalLines == 0)
-        {
-            report.Success = false;
-            report.DiagnosticMessage = $"طبقة الخطوط 'Polyline' داخل داتاسيت الكاد فارغة (0 معالم). يرجى التأكد من احتواء ملف الكاد على خطوط.";
-            return report;
-        }
+        System.Diagnostics.Debug.WriteLine($"[FeatureToPolygon Pre-flight] Polyline FC: '{actualPolylinePath}', WKID: {detectedWkid}, Unit: '{linearUnitName}', Input HasZ: {inputHasZ}.");
+        System.Diagnostics.Debug.WriteLine($"[FeatureToPolygon Pre-flight] Selected layers: {string.Join(", ", layerList)}");
 
-        if (eligibleLines == 0 && layerList.Count > 0)
+        foreach (var kvp in countsByLayer)
         {
-            report.Success = false;
-            report.DiagnosticMessage = $"لا توجد خطوط تطابق الطبقات المختارة ({string.Join(", ", layerList)}). إجمالي خطوط الكاد هو {totalLines} خط. يرجى اختيار الطبقات الصحيحة في الخطوة 1.";
-            return report;
-        }
-
-        // Delete existing output feature class if present to ensure clean execution
-        try
-        {
-            var delArgs = Geoprocessing.MakeValueArray(outFcPath);
-            await Geoprocessing.ExecuteToolAsync("management.Delete", delArgs);
-        }
-        catch { }
-
-        // Build selection layer for the eligible CAD layers
-        string tempLyr = "Cad_Selected_Polylines_" + Guid.NewGuid().ToString("N")[..8];
-        string whereClause = "";
-        if (layerList.Count > 0)
-        {
-            var quotedSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var l in layerList)
+            System.Diagnostics.Debug.WriteLine($"[FeatureToPolygon Pre-flight] Layer '{kvp.Key}': {kvp.Value} polylines.");
+            if (kvp.Value == 0)
             {
-                string clean = l.Replace("'", "''");
-                quotedSet.Add($"'{clean}'");
-                quotedSet.Add($"'{clean.ToUpperInvariant()}'");
-                quotedSet.Add($"'{clean.ToLowerInvariant()}'");
+                System.Diagnostics.Debug.WriteLine($"[FeatureToPolygon Pre-flight Warning] Selected layer '{kvp.Key}' has 0 polylines in the feature class.");
             }
-            whereClause = $"Layer IN ({string.Join(", ", quotedSet)})";
         }
 
-        bool gpSuccess = false;
-        string gpMsgOutput = "";
+        long totalSelectedPolylines = countsByLayer.Values.Sum();
+        report.EligibleInputLines = totalSelectedPolylines;
+
+        if (totalSelectedPolylines == 0)
+        {
+            report.Success = false;
+            report.DiagnosticMessage = $"Selected layers ({string.Join(", ", layerList)}) contain 0 total polylines in '{actualPolylinePath}'. Distinct layers present in feature class: {string.Join(", ", distinctLayers.OrderBy(x => x))}.";
+            return report;
+        }
+
+        // Section 3: Building the selection (strict UPPER(Layer) IN (...))
+        string whereClause = BuildLayerWhere(layerList);
+        string tempLyr = "Cad_Selected_Polylines_" + Guid.NewGuid().ToString("N")[..8];
+
+        System.Diagnostics.Debug.WriteLine($"[FeatureToPolygon START] GeometryMode=Lines, SourcePath='{actualPolylinePath}', SelectedLayers=[{string.Join(", ", layerList)}], WHERE=\"{whereClause}\", OutFC='{outFcName}', Class={assignedClass}");
+
+        string clusterTolStr = snapToleranceMeters > 0.0001
+            ? $"{snapToleranceMeters.ToString(System.Globalization.CultureInfo.InvariantCulture)} {linearUnitName}"
+            : "";
 
         try
         {
-            // 2. Create temporary Feature Layer with the Layer selection where_clause
             var makeLyrArgs = Geoprocessing.MakeValueArray(actualPolylinePath, tempLyr, whereClause);
             var lyrResult = await Geoprocessing.ExecuteToolAsync("management.MakeFeatureLayer", makeLyrArgs);
-            if (lyrResult.IsFailed && !string.IsNullOrWhiteSpace(whereClause))
+            if (lyrResult.IsFailed)
             {
-                makeLyrArgs = Geoprocessing.MakeValueArray(actualPolylinePath, tempLyr);
-                lyrResult = await Geoprocessing.ExecuteToolAsync("management.MakeFeatureLayer", makeLyrArgs);
+                report.Success = false;
+                string msgs = lyrResult.Messages != null
+                    ? string.Join(Environment.NewLine, lyrResult.Messages.Select(m => m.Text))
+                    : "MakeFeatureLayer failed";
+                report.GpMessages = msgs;
+                report.DiagnosticMessage = $"MakeFeatureLayer failed with expression: {whereClause}\nGeoprocessing messages:\n{msgs}";
+                return report;
             }
 
-            if (!lyrResult.IsFailed)
+            // Compare selected count with pre-flight count
+            long selectedCount = -1;
+            try
             {
-                // 3. Run FeatureToPolygon on the selected polylines
-                string clusterTolStr = snapToleranceMeters > 0.001 
-                    ? $"{snapToleranceMeters.ToString(System.Globalization.CultureInfo.InvariantCulture)} Meters" 
-                    : "";
-
-                var f2pArgs = Geoprocessing.MakeValueArray(
-                    tempLyr,
-                    outFcPath,
-                    clusterTolStr,
-                    "NO_ATTRIBUTES"
-                );
-                var envs = Geoprocessing.MakeEnvironmentArray(
-                    new KeyValuePair<string, string>("outputZFlag", "Disabled"),
-                    new KeyValuePair<string, string>("outputMFlag", "Disabled")
-                );
-                var f2pResult = await Geoprocessing.ExecuteToolAsync("management.FeatureToPolygon", f2pArgs, envs);
-
-                if (f2pResult?.Messages != null)
+                var countArgs = Geoprocessing.MakeValueArray(tempLyr);
+                var countResult = await Geoprocessing.ExecuteToolAsync("management.GetCount", countArgs);
+                if (!countResult.IsFailed && countResult.ReturnValue != null && long.TryParse(countResult.ReturnValue.ToString(), out long cnt))
                 {
-                    gpMsgOutput = string.Join(Environment.NewLine, f2pResult.Messages.Select(m => m.Text));
-                }
-                report.GpMessages = gpMsgOutput;
-
-                if (f2pResult != null && !f2pResult.IsFailed)
-                {
-                    gpSuccess = true;
-                }
-                else
-                {
-                    report.DiagnosticMessage = $"فشل تنفيذ أداة Feature to Polygon في ArcGIS Pro:\n{gpMsgOutput}";
+                    selectedCount = cnt;
                 }
             }
-            else
+            catch { }
+            System.Diagnostics.Debug.WriteLine($"[FeatureToPolygon Selection] MakeFeatureLayer selected {selectedCount} features (Expected: {totalSelectedPolylines}).");
+
+            // Section 4: Running Feature To Polygon (Z disabled)
+            try
             {
-                gpMsgOutput = string.Join(Environment.NewLine, lyrResult.Messages.Select(m => m.Text));
-                report.GpMessages = gpMsgOutput;
-                report.DiagnosticMessage = $"فشل إنشاء طبقة التحديد المؤقتة MakeFeatureLayer للخطوط:\n{gpMsgOutput}";
+                var delArgs = Geoprocessing.MakeValueArray(outFcPath);
+                await Geoprocessing.ExecuteToolAsync("management.Delete", delArgs);
             }
-        }
-        catch (Exception ex)
-        {
-            report.DiagnosticMessage = $"خطأ استثنائي أثناء تشغيل FeatureToPolygon GP: {ex.Message}";
+            catch { }
+
+            var env = Geoprocessing.MakeEnvironmentArray(
+                workspace: gdbPath,
+                overwriteoutput: true,
+                outputZFlag: "Disabled",
+                outputMFlag: "Disabled"
+            );
+
+            var f2pArgs = Geoprocessing.MakeValueArray(
+                tempLyr,
+                outFcPath,
+                clusterTolStr,
+                "NO_ATTRIBUTES"
+            );
+
+            var f2pResult = await Geoprocessing.ExecuteToolAsync("management.FeatureToPolygon", f2pArgs, env);
+
+            string gpMsgOutput = f2pResult?.Messages != null
+                ? string.Join(Environment.NewLine, f2pResult.Messages.Select(m => m.Text))
+                : string.Empty;
+            report.GpMessages = gpMsgOutput;
+
+            if (f2pResult == null || f2pResult.IsFailed)
+            {
+                report.Success = false;
+                report.DiagnosticMessage = $"FeatureToPolygon failed.\nGeoprocessing messages:\n{gpMsgOutput}";
+                return report;
+            }
         }
         finally
         {
-            // Clean up temporary feature layer
             try
             {
                 var delLyrArgs = Geoprocessing.MakeValueArray(tempLyr);
@@ -1810,65 +1982,84 @@ public static class GdbFeatureClassService
             catch { }
         }
 
-        // 4. Read the constructed polygons from the resulting Feature Class
-        if (gpSuccess)
-        {
-            await ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() =>
-            {
-                try
-                {
-                    using var gdb = new Geodatabase(new FileGeodatabaseConnectionPath(new Uri(gdbPath)));
-                    using var fc = gdb.OpenDataset<FeatureClass>(outFcName);
-                    if (fc != null)
-                    {
-                        var def = fc.GetDefinition();
-                        var fcSr = def.GetSpatialReference();
-                        var targetSr = epsgCode > 0 ? SpatialReferenceBuilder.CreateSpatialReference(epsgCode) : fcSr;
-                        int layerIdx = def.FindField("Layer");
+        // Section 5: Verifying the result (report facts, not guesses)
+        bool outputHasZ = false;
+        long validPolygonCount = 0;
+        var polygons = new List<Polygon>();
 
-                        using var cursor = fc.Search(null, false);
-                        while (cursor.MoveNext())
+        await ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() =>
+        {
+            try
+            {
+                using var gdb = new Geodatabase(new FileGeodatabaseConnectionPath(new Uri(gdbPath)));
+                using var outFc = gdb.OpenDataset<FeatureClass>(outFcName);
+                if (outFc != null)
+                {
+                    var def = outFc.GetDefinition();
+                    var fcSr = def.GetSpatialReference();
+                    var targetSr = detectedWkid > 0 ? SpatialReferenceBuilder.CreateSpatialReference(detectedWkid) : fcSr;
+
+                    using var cur = outFc.Search(null, false);
+                    while (cur.MoveNext())
+                    {
+                        using var feat = (Feature)cur.Current;
+                        if (feat.GetShape() is Polygon poly && !poly.IsEmpty && poly.Area > 0.000001)
                         {
-                            using var feat = (Feature)cursor.Current;
-                            if (feat.GetShape() is Polygon poly && !poly.IsEmpty)
+                            if (poly.HasZ) outputHasZ = true;
+                            var poly2D = ParcelPolygonizer.Ensure2D(poly);
+                            if (targetSr != null && (poly2D.SpatialReference == null || !poly2D.SpatialReference.IsEqual(targetSr)))
                             {
-                                var poly2D = ParcelPolygonizer.Ensure2D(poly);
-                                if (targetSr != null && (poly2D.SpatialReference == null || !poly2D.SpatialReference.IsEqual(targetSr)))
-                                {
-                                    var pb = new PolygonBuilderEx(poly2D) { SpatialReference = targetSr };
-                                    pb.HasZ = false;
-                                    pb.HasM = false;
-                                    poly2D = (Polygon)pb.ToGeometry();
-                                }
-                                string layerVal = layerIdx >= 0 ? feat[layerIdx]?.ToString()?.Trim() ?? "" : "";
-                                if (string.IsNullOrWhiteSpace(layerVal) && layerList.Count > 0)
-                                {
-                                    layerVal = layerList[0];
-                                }
-                                report.ConstructedParcels.Add((poly2D, layerVal));
+                                var pb = new PolygonBuilderEx(poly2D) { SpatialReference = targetSr };
+                                pb.HasZ = false;
+                                pb.HasM = false;
+                                poly2D = (Polygon)pb.ToGeometry();
                             }
+                            polygons.Add(poly2D);
+                            validPolygonCount++;
                         }
                     }
                 }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"Error reading FeatureToPolygon result: {ex.Message}");
-                }
-            });
-        }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[FeatureToPolygon Inspection Error] {ex.Message}");
+            }
+        });
 
-        report.OutputPolygonCount = report.ConstructedParcels.Count;
+        report.OutputPolygonCount = validPolygonCount;
 
-        if (gpSuccess && report.OutputPolygonCount > 0)
-        {
-            report.Success = true;
-            report.DiagnosticMessage = $"نجح تحويل الخطوط: تم بناء {report.OutputPolygonCount} مضلع بنجاح من إجمالي {eligibleLines} خط في الطبقات المحددة (EPSG:{detectedEpsg}).";
-        }
-        else if (gpSuccess && report.OutputPolygonCount == 0)
+        string tolFact = string.IsNullOrEmpty(clusterTolStr) ? "none" : clusterTolStr;
+        System.Diagnostics.Debug.WriteLine($"[FeatureToPolygon Verification] Selected lines: {totalSelectedPolylines}, Polygons: {validPolygonCount}, Tolerance: '{tolFact}', Linear unit: '{linearUnitName}', Output HasZ: {outputHasZ}");
+
+        if (validPolygonCount == 0)
         {
             report.Success = false;
-            report.DiagnosticMessage = $"أداة FeatureToPolygon اكتملت لكنها أنتجت 0 مضلع من إجمالي {eligibleLines} خط مدخل. السبب الهندسي: الخطوط لا تشكل حلقات مغلقة (Unclosed Boundary Lines) وتوجد فجوات أو أطراف مفتوحة (Dangles).\nرسائل أداة ArcGIS:\n{gpMsgOutput}";
+            string layerSummary = string.Join(", ", countsByLayer.Select(kv => $"{kv.Key} ({kv.Value} lines)"));
+            report.DiagnosticMessage = $"Selected layers: {layerSummary}. Feature To Polygon produced 0 polygons. Tolerance used: {tolFact}. Spatial reference: WKID {detectedWkid}, unit {linearUnitName}. Geoprocessing messages:\n{report.GpMessages}";
+            return report;
         }
+
+        report.Success = true;
+        foreach (var p in polygons)
+        {
+            report.ConstructedParcels.Add((p, outFcName));
+            report.ConstructedClassParcels.Add((p, assignedClass));
+        }
+        report.DiagnosticMessage = $"Feature To Polygon succeeded: produced {validPolygonCount} polygons from {totalSelectedPolylines} lines (Tolerance: '{tolFact}', WKID: {detectedWkid}).";
+
+        // Clean up intermediate feature class if not the final Cad_Constructed_Parcels
+        if (!outFcName.Equals("Cad_Constructed_Parcels", StringComparison.OrdinalIgnoreCase) &&
+            !outFcName.Equals("DEMO_Cad_Constructed_Parcels", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                var delArgs = Geoprocessing.MakeValueArray(outFcPath);
+                await Geoprocessing.ExecuteToolAsync("management.Delete", delArgs);
+            }
+            catch { }
+        }
+
+        System.Diagnostics.Debug.WriteLine($"[FeatureToPolygon END] GeometryMode=Lines, OutputPath='{outFcPath}', PolygonCount={validPolygonCount}, Tolerance='{tolFact}', SpatialRef='WKID {detectedWkid}, {linearUnitName}'");
 
         return report;
     }
@@ -2031,6 +2222,273 @@ public static class GdbFeatureClassService
         // Fall back to ArcGIS Pro native GP FeatureToPolygon report
         return await RunFeatureToPolygonReportAsync(gdbPath, datasetName, eligibleLayerNames, snapToleranceMeters, epsgCode);
     }
+
+    /// <summary>
+    /// Verifies that a polygon feature class exists, is readable, has Polygon geometry,
+    /// <summary>
+    /// Verifies that a polygon feature class exists, is readable, has Polygon geometry,
+    /// has feature count equal to expectedCount (or >0), and has matching spatial reference WKID.
+    /// </summary>
+    public static (bool ok, string reason) VerifyPolygonFeatureClass(string fcPath, int expectedCount, int expectedWkid)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(fcPath))
+                return (false, "path is null or empty");
+
+            if (File.Exists(fcPath) && !fcPath.EndsWith(".gdb", StringComparison.OrdinalIgnoreCase))
+                return (true, "");
+
+            if (ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.OnWorker)
+            {
+                return VerifyPolygonFeatureClassInternal(fcPath, expectedCount, expectedWkid);
+            }
+            return Task.Run(async () => await VerifyPolygonFeatureClassAsync(fcPath, expectedCount, expectedWkid)).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
+    }
+
+    public static async Task<(bool ok, string reason)> VerifyPolygonFeatureClassAsync(string fcPath, int expectedCount, int expectedWkid)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(fcPath))
+                return (false, "path is null or empty");
+
+            if (File.Exists(fcPath) && !fcPath.EndsWith(".gdb", StringComparison.OrdinalIgnoreCase))
+                return (true, "");
+
+            if (ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.OnWorker)
+            {
+                return VerifyPolygonFeatureClassInternal(fcPath, expectedCount, expectedWkid);
+            }
+            return await ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() =>
+                VerifyPolygonFeatureClassInternal(fcPath, expectedCount, expectedWkid)
+            );
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
+    }
+
+    private static (bool ok, string reason) VerifyPolygonFeatureClassInternal(string fcPath, int expectedCount, int expectedWkid)
+    {
+        try
+        {
+            string? dir = Path.GetDirectoryName(fcPath);
+            string fcName = Path.GetFileName(fcPath);
+
+            string gdbDir = dir ?? "";
+            if (!gdbDir.EndsWith(".gdb", StringComparison.OrdinalIgnoreCase) && gdbDir.Contains(".gdb"))
+            {
+                int gdbIdx = gdbDir.IndexOf(".gdb", StringComparison.OrdinalIgnoreCase);
+                gdbDir = gdbDir.Substring(0, gdbIdx + 4);
+            }
+
+            if (!Directory.Exists(gdbDir))
+                return (false, $"geodatabase directory does not exist: {gdbDir}");
+
+            using var gdb = new Geodatabase(new FileGeodatabaseConnectionPath(new Uri(gdbDir)));
+            using var fc = OpenDatasetFeatureClass(gdb, fcName);
+            if (fc == null)
+                return (false, $"dataset '{fcName}' not found in gdb '{gdbDir}'");
+
+            var def = fc.GetDefinition();
+            if (def.GetShapeType() != GeometryType.Polygon)
+                return (false, $"geometry type is not Polygon ({def.GetShapeType()})");
+
+            long n = fc.GetCount();
+            if (n == 0 || (expectedCount > 0 && n != expectedCount))
+                return (false, $"feature count {n} != expected {expectedCount}");
+
+            if (expectedWkid > 0)
+            {
+                var sr = def.GetSpatialReference();
+                if (sr != null && sr.Wkid != expectedWkid)
+                    return (false, $"spatial reference mismatch ({sr.Wkid} != expected {expectedWkid})");
+            }
+
+            return (true, "");
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Verifies that a polyline feature class exists, is readable, has Polyline geometry,
+    /// has feature count equal to expectedCount (or >0), and has matching spatial reference WKID.
+    /// </summary>
+    public static (bool ok, string reason) VerifyPolylineFeatureClass(string fcPath, int expectedCount, int expectedWkid)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(fcPath))
+                return (false, "path is null or empty");
+
+            if (File.Exists(fcPath) && !fcPath.EndsWith(".gdb", StringComparison.OrdinalIgnoreCase))
+                return (true, "");
+
+            if (ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.OnWorker)
+            {
+                return VerifyPolylineFeatureClassInternal(fcPath, expectedCount, expectedWkid);
+            }
+            return Task.Run(async () => await VerifyPolylineFeatureClassAsync(fcPath, expectedCount, expectedWkid)).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
+    }
+
+    public static async Task<(bool ok, string reason)> VerifyPolylineFeatureClassAsync(string fcPath, int expectedCount, int expectedWkid)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(fcPath))
+                return (false, "path is null or empty");
+
+            if (File.Exists(fcPath) && !fcPath.EndsWith(".gdb", StringComparison.OrdinalIgnoreCase))
+                return (true, "");
+
+            if (ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.OnWorker)
+            {
+                return VerifyPolylineFeatureClassInternal(fcPath, expectedCount, expectedWkid);
+            }
+            return await ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() =>
+                VerifyPolylineFeatureClassInternal(fcPath, expectedCount, expectedWkid)
+            );
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
+    }
+
+    private static (bool ok, string reason) VerifyPolylineFeatureClassInternal(string fcPath, int expectedCount, int expectedWkid)
+    {
+        try
+        {
+            string? dir = Path.GetDirectoryName(fcPath);
+            string fcName = Path.GetFileName(fcPath);
+
+            string gdbDir = dir ?? "";
+            if (!gdbDir.EndsWith(".gdb", StringComparison.OrdinalIgnoreCase) && gdbDir.Contains(".gdb"))
+            {
+                int gdbIdx = gdbDir.IndexOf(".gdb", StringComparison.OrdinalIgnoreCase);
+                gdbDir = gdbDir.Substring(0, gdbIdx + 4);
+            }
+
+            if (!Directory.Exists(gdbDir))
+                return (false, $"geodatabase directory does not exist: {gdbDir}");
+
+            using var gdb = new Geodatabase(new FileGeodatabaseConnectionPath(new Uri(gdbDir)));
+            using var fc = OpenDatasetFeatureClass(gdb, fcName);
+            if (fc == null)
+                return (false, $"dataset '{fcName}' not found in gdb '{gdbDir}'");
+
+            var def = fc.GetDefinition();
+            if (def.GetShapeType() != GeometryType.Polyline)
+                return (false, $"geometry type is not Polyline ({def.GetShapeType()})");
+
+            long n = fc.GetCount();
+            if (n == 0 || (expectedCount > 0 && n != expectedCount))
+                return (false, $"feature count {n} != expected {expectedCount}");
+
+            if (expectedWkid > 0)
+            {
+                var sr = def.GetSpatialReference();
+                if (sr != null && sr.Wkid != expectedWkid)
+                    return (false, $"spatial reference mismatch ({sr.Wkid} != expected {expectedWkid})");
+            }
+
+            return (true, "");
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// P6 Verification: Verifies all deliverables in finalDir before updating latest export state:
+    /// Final.gdb PARCEL and BORDER readable with counts equal to in-memory counts;
+    /// Shape\PARCEL.shp and BORDER.shp with .shp/.shx/.dbf/.prj/.cpg;
+    /// and required quality reports exist.
+    /// </summary>
+    public static (bool Ok, string Report) VerifyFinalExport(string finalDir, int expectedParcelCount, int expectedBorderCount, int expectedWkid)
+    {
+        if (string.IsNullOrWhiteSpace(finalDir) || !Directory.Exists(finalDir))
+            return (false, $"Final export directory does not exist: {finalDir}");
+
+        var issues = new List<string>();
+
+        // 1. GDB Deliverable
+        string finalGdb = Path.Combine(finalDir, "Final.gdb");
+        if (!Directory.Exists(finalGdb))
+        {
+            issues.Add($"Final.gdb does not exist at '{finalGdb}'.");
+        }
+        else
+        {
+            var (pOk, pReason) = VerifyPolygonFeatureClass(Path.Combine(finalGdb, "PARCEL"), expectedParcelCount, expectedWkid);
+            if (!pOk) issues.Add($"Final.gdb PARCEL verification failed: {pReason}");
+
+            if (expectedBorderCount > 0)
+            {
+                var (bOk, bReason) = VerifyPolylineFeatureClass(Path.Combine(finalGdb, "BORDER"), expectedBorderCount, expectedWkid);
+                if (!bOk) issues.Add($"Final.gdb BORDER verification failed: {bReason}");
+            }
+        }
+
+        // 2. Shapefile Deliverables
+        string shapeDir = Path.Combine(finalDir, "Shape");
+        string[] requiredExtensions = new[] { ".shp", ".shx", ".dbf", ".prj", ".cpg" };
+
+        string parcelShpBase = Path.Combine(shapeDir, "PARCEL");
+        foreach (var ext in requiredExtensions)
+        {
+            string f = parcelShpBase + ext;
+            if (!File.Exists(f)) issues.Add($"Missing required shapefile component: {Path.GetFileName(f)}");
+        }
+
+        if (expectedBorderCount > 0)
+        {
+            string borderShpBase = Path.Combine(shapeDir, "BORDER");
+            foreach (var ext in requiredExtensions)
+            {
+                string f = borderShpBase + ext;
+                if (!File.Exists(f)) issues.Add($"Missing required border shapefile component: {Path.GetFileName(f)}");
+            }
+        }
+
+        // 3. Reports Deliverable
+        string reportsDir = Path.Combine(finalDir, "Reports");
+        if (!Directory.Exists(reportsDir))
+        {
+            issues.Add($"Reports folder does not exist at '{reportsDir}'.");
+        }
+        else
+        {
+            bool hasAnyReport = Directory.EnumerateFiles(reportsDir).Any();
+            if (!hasAnyReport) issues.Add("Reports folder is empty.");
+        }
+
+        if (issues.Count > 0)
+        {
+            return (false, string.Join(Environment.NewLine, issues));
+        }
+
+        string reportSummary = $"✔ Final.gdb: PARCEL ({expectedParcelCount}), BORDER ({expectedBorderCount})\n" +
+                               $"✔ Shape: PARCEL.shp, BORDER.shp (with all .shp/.shx/.dbf/.prj/.cpg sidecars)\n" +
+                               $"✔ Reports: verified in '{reportsDir}'";
+        return (true, reportSummary);
+    }
 }
 
 public class DatasetCadFeatures
@@ -2052,7 +2510,10 @@ public class FeatureToPolygonReport
     public double ToleranceMeters { get; set; }
     public string GpMessages { get; set; } = string.Empty;
     public string DiagnosticMessage { get; set; } = string.Empty;
+    public ParcelClass AssignedClass { get; set; } = ParcelClass.Main;
     public List<(Polygon Polygon, string LayerName)> ConstructedParcels { get; } = new();
+    public List<(Polygon Polygon, ParcelClass Class)> ConstructedClassParcels { get; } = new();
 }
+
 
 

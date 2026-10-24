@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 using ArcGIS.Core.Data;
 using ArcGIS.Core.Geometry;
 using ArcGIS.Desktop.Core.Geoprocessing;
+using ArcGIS.Desktop.Framework.Threading.Tasks;
 using Cad2Gis.Core.Models;
 using Cad2Gis.Core.Services;
 using Cad2Gis.AddIn.Geometry;
@@ -14,21 +16,20 @@ namespace Cad2Gis.AddIn.IO;
 
 public static class ShapefileExporter
 {
-    public static void ExportToShapefile(
+    public static async Task ExportToShapefileAsync(
         string outputFolder,
         string templateFolder,
         IReadOnlyList<ParcelRecord> parcels,
         IReadOnlyDictionary<long, Polygon> parcelGeoms,
         IReadOnlyList<BorderRecord> borders,
         IReadOnlyDictionary<long, Polyline> borderGeoms,
-        out List<string> warnings,
+        List<string> warnings,
         string parcelBaseName = "PARCEL",
         string borderBaseName = "border",
         int epsgCode = 0,
         double maxDeviationMeters = 0.001,
         bool alsoKeepExactUtmGdb = false)
     {
-        warnings = new List<string>();
         Directory.CreateDirectory(outputFolder);
 
         // Pre-export DBF Text Length Validation
@@ -59,7 +60,14 @@ public static class ShapefileExporter
         if (File.Exists(parcelTemplate))
         {
             CloneTemplateFiles(templateFolder, "PARCEL", outputFolder, parcelBaseName);
-            WriteParcelsToShapefile(outputFolder, $"{parcelBaseName}.shp", parcels, parcelGeoms, maxDeviationMeters);
+            if (QueuedTask.OnWorker)
+            {
+                WriteParcelsToShapefile(outputFolder, $"{parcelBaseName}.shp", parcels, parcelGeoms, maxDeviationMeters);
+            }
+            else
+            {
+                await QueuedTask.Run(() => WriteParcelsToShapefile(outputFolder, $"{parcelBaseName}.shp", parcels, parcelGeoms, maxDeviationMeters));
+            }
             WriteCpgFile(outputFolder, $"{parcelBaseName}.cpg");
             WritePrjFile(outputFolder, parcelBaseName, epsgCode);
         }
@@ -73,7 +81,14 @@ public static class ShapefileExporter
         if (File.Exists(borderTemplate))
         {
             CloneTemplateFiles(templateFolder, "border", outputFolder, borderBaseName);
-            WriteBordersToShapefile(outputFolder, $"{borderBaseName}.shp", borders, borderGeoms, maxDeviationMeters);
+            if (QueuedTask.OnWorker)
+            {
+                WriteBordersToShapefile(outputFolder, $"{borderBaseName}.shp", borders, borderGeoms, maxDeviationMeters);
+            }
+            else
+            {
+                await QueuedTask.Run(() => WriteBordersToShapefile(outputFolder, $"{borderBaseName}.shp", borders, borderGeoms, maxDeviationMeters));
+            }
             WriteCpgFile(outputFolder, $"{borderBaseName}.cpg");
             WritePrjFile(outputFolder, borderBaseName, epsgCode);
         }
@@ -88,8 +103,8 @@ public static class ShapefileExporter
             try
             {
                 string exactGdbPath = Path.Combine(outputFolder, "Exact_UTM_Curves.gdb");
-                GdbFeatureClassService.ExportParcelsToGdbAsync(exactGdbPath, parcelBaseName, parcelTemplate, parcels, parcelGeoms, epsgCode).GetAwaiter().GetResult();
-                GdbFeatureClassService.ExportBordersToGdbAsync(exactGdbPath, borderBaseName, borderTemplate, borders, borderGeoms, epsgCode).GetAwaiter().GetResult();
+                await GdbFeatureClassService.ExportParcelsToGdbAsync(exactGdbPath, parcelBaseName, parcelTemplate, parcels, parcelGeoms, epsgCode);
+                await GdbFeatureClassService.ExportBordersToGdbAsync(exactGdbPath, borderBaseName, borderTemplate, borders, borderGeoms, epsgCode);
                 warnings.Add($"[Exact UTM Copy] Preserved exact true-curve feature classes in '{exactGdbPath}'.");
             }
             catch (Exception ex)
@@ -97,6 +112,35 @@ public static class ShapefileExporter
                 warnings.Add($"[Exact UTM Copy Error] Could not export true curves GDB: {ex.Message}");
             }
         }
+    }
+
+    public static void ExportToShapefile(
+        string outputFolder,
+        string templateFolder,
+        IReadOnlyList<ParcelRecord> parcels,
+        IReadOnlyDictionary<long, Polygon> parcelGeoms,
+        IReadOnlyList<BorderRecord> borders,
+        IReadOnlyDictionary<long, Polyline> borderGeoms,
+        out List<string> warnings,
+        string parcelBaseName = "PARCEL",
+        string borderBaseName = "border",
+        int epsgCode = 0,
+        double maxDeviationMeters = 0.001,
+        bool alsoKeepExactUtmGdb = false)
+    {
+        var localWarns = new List<string>();
+        if (QueuedTask.OnWorker)
+        {
+            ExportToShapefileAsync(outputFolder, templateFolder, parcels, parcelGeoms, borders, borderGeoms, localWarns, parcelBaseName, borderBaseName, epsgCode, maxDeviationMeters, alsoKeepExactUtmGdb).GetAwaiter().GetResult();
+        }
+        else
+        {
+            Task.Run(async () =>
+            {
+                await ExportToShapefileAsync(outputFolder, templateFolder, parcels, parcelGeoms, borders, borderGeoms, localWarns, parcelBaseName, borderBaseName, epsgCode, maxDeviationMeters, alsoKeepExactUtmGdb);
+            }).GetAwaiter().GetResult();
+        }
+        warnings = localWarns;
     }
 
     public static async Task ExportToFeatureClassAsync(
@@ -143,14 +187,28 @@ public static class ShapefileExporter
         string templateParcel = Path.Combine(templateFolder, "PARCEL.shp");
         string templateBorder = Path.Combine(templateFolder, "border.shp");
 
-        // Write parcels
-        GdbFeatureClassService.WriteParcelsToFeatureClass(targetGdbPath, parcelFcName, parcels, parcelGeoms);
+        if (QueuedTask.OnWorker)
+        {
+            // Write parcels
+            GdbFeatureClassService.WriteParcelsToFeatureClass(targetGdbPath, parcelFcName, parcels, parcelGeoms);
 
-        // Write borders
-        GdbFeatureClassService.WriteBordersToFeatureClass(targetGdbPath, borderFcName, borders, borderGeoms);
+            // Write borders
+            GdbFeatureClassService.WriteBordersToFeatureClass(targetGdbPath, borderFcName, borders, borderGeoms);
+        }
+        else
+        {
+            Task.Run(async () =>
+            {
+                await QueuedTask.Run(() =>
+                {
+                    GdbFeatureClassService.WriteParcelsToFeatureClass(targetGdbPath, parcelFcName, parcels, parcelGeoms);
+                    GdbFeatureClassService.WriteBordersToFeatureClass(targetGdbPath, borderFcName, borders, borderGeoms);
+                });
+            }).GetAwaiter().GetResult();
+        }
     }
 
-    public static void ExportSingleParcelShapefile(
+    public static async Task ExportSingleParcelShapefileAsync(
         string outputFolder,
         string templateFolder,
         IReadOnlyList<ParcelRecord> parcels,
@@ -163,7 +221,58 @@ public static class ShapefileExporter
         if (File.Exists(parcelTemplate))
         {
             CloneTemplateFiles(templateFolder, "PARCEL", outputFolder, baseName);
-            WriteParcelsToShapefile(outputFolder, $"{baseName}.shp", parcels, parcelGeoms);
+            if (QueuedTask.OnWorker)
+            {
+                WriteParcelsToShapefile(outputFolder, $"{baseName}.shp", parcels, parcelGeoms);
+            }
+            else
+            {
+                await QueuedTask.Run(() => WriteParcelsToShapefile(outputFolder, $"{baseName}.shp", parcels, parcelGeoms));
+            }
+            WriteCpgFile(outputFolder, $"{baseName}.cpg");
+            WritePrjFile(outputFolder, baseName, epsgCode);
+        }
+    }
+
+    public static void ExportSingleParcelShapefile(
+        string outputFolder,
+        string templateFolder,
+        IReadOnlyList<ParcelRecord> parcels,
+        IReadOnlyDictionary<long, Polygon> parcelGeoms,
+        string baseName = "PARCEL",
+        int epsgCode = 0)
+    {
+        if (QueuedTask.OnWorker)
+        {
+            ExportSingleParcelShapefileAsync(outputFolder, templateFolder, parcels, parcelGeoms, baseName, epsgCode).GetAwaiter().GetResult();
+        }
+        else
+        {
+            Task.Run(async () => await ExportSingleParcelShapefileAsync(outputFolder, templateFolder, parcels, parcelGeoms, baseName, epsgCode)).GetAwaiter().GetResult();
+        }
+    }
+
+    public static async Task ExportSingleBorderShapefileAsync(
+        string outputFolder,
+        string templateFolder,
+        IReadOnlyList<BorderRecord> borders,
+        IReadOnlyDictionary<long, Polyline> borderGeoms,
+        string baseName = "border",
+        int epsgCode = 0)
+    {
+        Directory.CreateDirectory(outputFolder);
+        string borderTemplate = Path.Combine(templateFolder, "border.shp");
+        if (File.Exists(borderTemplate))
+        {
+            CloneTemplateFiles(templateFolder, "border", outputFolder, baseName);
+            if (QueuedTask.OnWorker)
+            {
+                WriteBordersToShapefile(outputFolder, $"{baseName}.shp", borders, borderGeoms);
+            }
+            else
+            {
+                await QueuedTask.Run(() => WriteBordersToShapefile(outputFolder, $"{baseName}.shp", borders, borderGeoms));
+            }
             WriteCpgFile(outputFolder, $"{baseName}.cpg");
             WritePrjFile(outputFolder, baseName, epsgCode);
         }
@@ -177,14 +286,13 @@ public static class ShapefileExporter
         string baseName = "border",
         int epsgCode = 0)
     {
-        Directory.CreateDirectory(outputFolder);
-        string borderTemplate = Path.Combine(templateFolder, "border.shp");
-        if (File.Exists(borderTemplate))
+        if (QueuedTask.OnWorker)
         {
-            CloneTemplateFiles(templateFolder, "border", outputFolder, baseName);
-            WriteBordersToShapefile(outputFolder, $"{baseName}.shp", borders, borderGeoms);
-            WriteCpgFile(outputFolder, $"{baseName}.cpg");
-            WritePrjFile(outputFolder, baseName, epsgCode);
+            ExportSingleBorderShapefileAsync(outputFolder, templateFolder, borders, borderGeoms, baseName, epsgCode).GetAwaiter().GetResult();
+        }
+        else
+        {
+            Task.Run(async () => await ExportSingleBorderShapefileAsync(outputFolder, templateFolder, borders, borderGeoms, baseName, epsgCode)).GetAwaiter().GetResult();
         }
     }
 
@@ -350,7 +458,7 @@ public static class ShapefileExporter
         insertCursor.Flush();
     }
 
-    public static void ExportDeviatingParcelsToShapefile(
+    public static async Task ExportDeviatingParcelsToShapefileAsync(
         string outputFolder,
         string templateFolder,
         IReadOnlyList<ParcelDeviationItem> deviations,
@@ -366,6 +474,38 @@ public static class ShapefileExporter
         WriteCpgFile(outputFolder, "PARCEL_Differences.cpg");
         WritePrjFile(outputFolder, "PARCEL_Differences", epsgCode);
 
+        if (QueuedTask.OnWorker)
+        {
+            WriteDeviatingParcelsToShapefile(outputFolder, deviations, parcelGeoms);
+        }
+        else
+        {
+            await QueuedTask.Run(() => WriteDeviatingParcelsToShapefile(outputFolder, deviations, parcelGeoms));
+        }
+    }
+
+    public static void ExportDeviatingParcelsToShapefile(
+        string outputFolder,
+        string templateFolder,
+        IReadOnlyList<ParcelDeviationItem> deviations,
+        IReadOnlyDictionary<long, Polygon> parcelGeoms,
+        int epsgCode = 0)
+    {
+        if (QueuedTask.OnWorker)
+        {
+            ExportDeviatingParcelsToShapefileAsync(outputFolder, templateFolder, deviations, parcelGeoms, epsgCode).GetAwaiter().GetResult();
+        }
+        else
+        {
+            Task.Run(async () => await ExportDeviatingParcelsToShapefileAsync(outputFolder, templateFolder, deviations, parcelGeoms, epsgCode)).GetAwaiter().GetResult();
+        }
+    }
+
+    private static void WriteDeviatingParcelsToShapefile(
+        string outputFolder,
+        IReadOnlyList<ParcelDeviationItem> deviations,
+        IReadOnlyDictionary<long, Polygon> parcelGeoms)
+    {
         var fileConn = new FileSystemConnectionPath(new Uri(outputFolder), FileSystemDatastoreType.Shapefile);
         using var datastore = new FileSystemDatastore(fileConn);
         using var fc = datastore.OpenDataset<FeatureClass>("PARCEL_Differences.shp");

@@ -648,13 +648,13 @@
                                                 </StackPanel>
                                             </Button>
 
-                                            <!-- Tab 4: Roads & References -->
+                                            <!-- Tab 4: Ignore Layers -->
                                             <Button Style="{StaticResource ModernCadTabButton}"
-                                                    Command="{Binding SelectCadTabCommand}" CommandParameter="Roads &amp; References"
-                                                    Tag="{Binding IsRoadsReferencesTabSelected}">
+                                                    Command="{Binding SelectCadTabCommand}" CommandParameter="Ignore Layers"
+                                                    Tag="{Binding IsIgnoreTabSelected}">
                                                 <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="[Roads &amp; References] (Ignored)"/>
-                                                    <TextBlock Text="{Binding RoadsReferencesBadge}" FontSize="9.5" Opacity="0.85" Margin="3,0,0,0"/>
+                                                    <TextBlock Text="[Ignore Layers] (Ignored)"/>
+                                                    <TextBlock Text="{Binding IgnoreBadge}" FontSize="9.5" Opacity="0.85" Margin="3,0,0,0"/>
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
@@ -718,7 +718,7 @@
                                             <MenuItem Header="Move to [Main Parcels]" Command="{Binding MoveLayerToCategoryCommand}" CommandParameter="Main Parcels"/>
                                             <MenuItem Header="Move to [Sub-Parcels / Utilities]" Command="{Binding MoveLayerToCategoryCommand}" CommandParameter="Sub-Parcels / Utilities"/>
                                             <MenuItem Header="Move to [Text &amp; Annotations]" Command="{Binding MoveLayerToCategoryCommand}" CommandParameter="Text &amp; Annotations"/>
-                                            <MenuItem Header="Move to [Roads &amp; References]" Command="{Binding MoveLayerToCategoryCommand}" CommandParameter="Roads &amp; References"/>
+                                            <MenuItem Header="Move to [Ignore Layers]" Command="{Binding MoveLayerToCategoryCommand}" CommandParameter="Ignore Layers"/>
                                         </ContextMenu>
                                     </DataGrid.ContextMenu>
 
@@ -855,83 +855,48 @@
                 </TabItem.Header>
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
                     <StackPanel>
-                        <!-- Tab 2 Working Data Source Selector & Summary Bar (Part B) -->
+                        <!-- Step 2 Working Data Source (Exactly 2 Options: PreviousStep, OwnData) -->
                         <Border Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1.2" CornerRadius="6" Padding="8" Margin="0,0,0,8">
                             <StackPanel>
                                 <TextBlock Text="مصدر بيانات بناء واستخراج البارسلات (Working Data Source):" FontWeight="Bold" Foreground="#38BDF8" FontSize="11" Margin="0,0,0,4"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <RadioButton Content="جلسة العمل من الكاد/الداتاسيت (CAD Session / Dataset) (افتراضي)" 
-                                                 IsChecked="{Binding IsSourceFromSession, Mode=TwoWay}" 
-                                                 GroupName="Tab2SourceGroup" Margin="0,0,12,0" FontWeight="Bold"/>
-                                    <RadioButton Content="أحدث تصدير يشمل تعديلاتي (Latest export)" 
-                                                 IsChecked="{Binding IsSourceFromLatestExport, Mode=TwoWay}" 
-                                                 GroupName="Tab2SourceGroup" Margin="0,0,12,0" FontWeight="SemiBold"/>
-                                    <RadioButton Content="استخدام بياناتي الخاصة (Use My Own Data)" 
-                                                 IsChecked="{Binding IsSourceFromCustom, Mode=TwoWay}" 
-                                                 GroupName="Tab2SourceGroup" FontWeight="SemiBold"/>
+                                    <RadioButton Content="مخرجات الخطوة السابقة (الخطوة 1: كاد / داتاسيت) (افتراضي)" 
+                                                 IsChecked="{Binding IsStep2SourcePreviousStep, Mode=TwoWay}" 
+                                                 GroupName="Step2SourceGroup" Margin="0,0,16,0" FontWeight="Bold"/>
+                                    <RadioButton Content="بياناتي الخاصة (My own data)" 
+                                                 IsChecked="{Binding IsStep2SourceOwnData, Mode=TwoWay}" 
+                                                 GroupName="Step2SourceGroup" FontWeight="SemiBold"/>
                                 </StackPanel>
 
-                                <!-- Working From Summary Bar -->
+                                <!-- Read-only Source Summary & Actions -->
                                 <Border Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,0,0,4">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{Binding WorkingFromSummary}" Foreground="#F8FAFC" FontSize="9.5" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                        <TextBlock Grid.Column="0" Text="{Binding Step2SourceSummary}" Foreground="#F8FAFC" FontSize="9.5" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap"/>
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="6,0,0,0">
-                                            <Button Content="📁 فتح المجلد" Command="{Binding OpenExportFolderCommand}" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
-                                            <Button Content="🔄 تغيير / استعراض" Command="{Binding ChangeSourceCommand}" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
-                                            <ComboBox ItemsSource="{Binding ExportHistoryItems}" SelectedItem="{Binding SelectedHistoryItem, Mode=TwoWay}"
-                                                      DisplayMemberPath="Timestamp" Width="105" Height="22" FontSize="9"
-                                                      Style="{StaticResource DarkComboBoxStyle}" ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"
-                                                      ToolTip="سجل التصديرات السابقة (Export History)"/>
+                                            <Button Content="📁 فتح المجلد" Command="{Binding OpenStepFolderCommand}" CommandParameter="2" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
+                                            <Button Content="🗺️ إضافة إلى الخريطة" Command="{Binding AddStepSourceToMapCommand}" CommandParameter="2" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
 
-                                <!-- Custom Data Source Selection Panel (Map Layer or GDB Feature Class) -->
+                                <!-- Own Data Browse Panel (Visible only when IsStep2SourceOwnData is true) -->
                                 <Border Background="#101726" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,2,0,4"
-                                        Visibility="{Binding IsSourceFromCustom, Converter={StaticResource BoolToVis}}">
-                                    <StackPanel>
-                                        <TextBlock Text="🎯 اختيار طبقة من محتويات الخريطة (Map Contents Layer):" FontSize="9.5" FontWeight="Bold" Foreground="#38BDF8" Margin="0,0,0,3"/>
-                                        <Grid Margin="0,0,0,4">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <ComboBox Grid.Column="0" ItemsSource="{Binding AvailableMapPolygonLayers}" SelectedItem="{Binding SelectedMapLayer, Mode=TwoWay}"
-                                                      DisplayMemberPath="DisplayText" Height="24" FontSize="9.5"
-                                                      Style="{StaticResource DarkComboBoxStyle}" ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"/>
-                                            <Button Grid.Column="1" Content="🔄 تحديث الخريطة" Command="{Binding RefreshMapLayersCommand}" 
-                                                    Height="24" Padding="6,1" Margin="4,0,0,0" Background="#334155" Foreground="White" FontSize="9"
-                                                    ToolTip="تحديث قائمة الطبقات من محتويات الخريطة النشطة"/>
-                                        </Grid>
-
-                                        <TextBlock Text="📁 أو استعراض Feature Class من Geodatabase (.gdb) / Shapefile:" FontSize="9.5" FontWeight="Bold" Foreground="#38BDF8" Margin="0,2,0,3"/>
-                                        <Grid Margin="0,0,0,2">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <TextBox Grid.Column="0" Text="{Binding CustomSchemaDataPath, UpdateSourceTrigger=PropertyChanged}" 
-                                                     Style="{StaticResource ModernTextBox}" Height="24" FontSize="9.5" Margin="0,0,4,0"
-                                                     Tag="مسار Feature Class أو اسم الطبقة المحددة..."/>
-                                            <Button Grid.Column="1" Content="📂 استعراض Feature Class" Command="{Binding BrowseFeatureClassCommand}" 
-                                                    Height="24" Padding="8,1" Margin="0,0,3,0" Background="#0284C7" Foreground="White" FontSize="9" FontWeight="SemiBold"
-                                                    ToolTip="استعراض واختيار Feature Class مباشرة من داخل أي File Geodatabase (.gdb) عبر متصفح ArcGIS Pro الرسمي"/>
-                                            <Button Grid.Column="2" Content="📄 ملف خارجي" Command="{Binding BrowseCustomFileCommand}" 
-                                                    Height="24" Padding="6,1" Margin="0" Background="#334155" Foreground="White" FontSize="9"
-                                                    ToolTip="استعراض ملف Shapefile أو Excel خارجي"/>
-                                        </Grid>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Missing Export Path Warning -->
-                                <Border Background="#7C2D12" BorderBrush="#EA580C" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,2,0,2"
-                                        Visibility="{Binding IsWorkingFromMissing, Converter={StaticResource BoolToVis}}">
-                                    <TextBlock Text="{Binding WorkingFromMissingWarning}" Foreground="#FED7AA" FontSize="9.5" FontWeight="Bold" TextWrapping="Wrap"/>
+                                        Visibility="{Binding IsStep2SourceOwnData, Converter={StaticResource BoolToVis}}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Grid.Column="0" Text="{Binding Step2OwnDataPath, UpdateSourceTrigger=PropertyChanged}" 
+                                                 Style="{StaticResource ModernTextBox}" Height="24" FontSize="9.5" Margin="0,0,4,0"
+                                                 Tag="مسار ملف Shapefile أو CAD أو Feature Class..."/>
+                                        <Button Grid.Column="1" Content="📂 استعراض..." Command="{Binding BrowseOwnDataCommand}" CommandParameter="2"
+                                                Height="24" Padding="8,1" Background="#0284C7" Foreground="White" FontSize="9.5" FontWeight="SemiBold"/>
+                                    </Grid>
                                 </Border>
                             </StackPanel>
                         </Border>
@@ -1105,70 +1070,49 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Step 3 Source Selector (Part B) -->
-                        <TextBlock Text="مصدر تعبئة البيانات والاسكيما (Populate Schema Source):" Style="{StaticResource HeaderLabel}" Margin="0,0,0,4"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                            <RadioButton Content="أحدث تصدير يشمل تعديلاتي (Latest export)" 
-                                         IsChecked="{Binding IsSourceFromLatestExport, Mode=TwoWay}" 
-                                         GroupName="SchemaSourceGroup" Margin="0,0,12,0" FontWeight="SemiBold"/>
-                            <RadioButton Content="جلسة العمل الحالية (Session data)" 
-                                         IsChecked="{Binding IsSourceFromSession, Mode=TwoWay}" 
-                                         GroupName="SchemaSourceGroup" Margin="0,0,12,0" FontWeight="SemiBold"/>
-                            <RadioButton Content="استخدام بياناتي الخاصة (Use My Own Data)" 
-                                         IsChecked="{Binding IsSourceFromCustom, Mode=TwoWay}" 
-                                         GroupName="SchemaSourceGroup" FontWeight="SemiBold"/>
-                        </StackPanel>
-
-                        <!-- Working From Summary Bar -->
-                        <Border Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,0,0,6">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{Binding WorkingFromSummary}" Foreground="#F8FAFC" FontSize="9.5" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap"/>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="6,0,0,0">
-                                    <Button Content="📁 فتح المجلد" Command="{Binding OpenExportFolderCommand}" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
-                                    <Button Content="🔄 تغيير / استعراض" Command="{Binding ChangeSourceCommand}" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-
-                        <!-- Custom Data Source Selection Panel (Map Layer or GDB Feature Class) -->
-                        <Border Background="#101726" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,2,0,6"
-                                Visibility="{Binding IsSourceFromCustom, Converter={StaticResource BoolToVis}}">
+                        <!-- Step 3 Working Data Source (Exactly 2 Options: PreviousStep, OwnData) -->
+                        <Border Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1.2" CornerRadius="6" Padding="8" Margin="0,0,0,8">
                             <StackPanel>
-                                <TextBlock Text="🎯 اختيار طبقة من محتويات الخريطة (Map Contents Layer):" FontSize="9.5" FontWeight="Bold" Foreground="#38BDF8" Margin="0,0,0,3"/>
-                                <Grid Margin="0,0,0,4">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <ComboBox Grid.Column="0" ItemsSource="{Binding AvailableMapPolygonLayers}" SelectedItem="{Binding SelectedMapLayer, Mode=TwoWay}"
-                                              DisplayMemberPath="DisplayText" Height="24" FontSize="9.5"
-                                              Style="{StaticResource DarkComboBoxStyle}" ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"/>
-                                    <Button Grid.Column="1" Content="🔄 تحديث الخريطة" Command="{Binding RefreshMapLayersCommand}" 
-                                            Height="24" Padding="6,1" Margin="4,0,0,0" Background="#334155" Foreground="White" FontSize="9"
-                                            ToolTip="تحديث قائمة الطبقات من محتويات الخريطة النشطة"/>
-                                </Grid>
+                                <TextBlock Text="مصدر تعبئة الاسكيما والبيانات البلدية (Populate Schema Source):" FontWeight="Bold" Foreground="#38BDF8" FontSize="11" Margin="0,0,0,4"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <RadioButton Content="مخرجات الخطوة السابقة (الخطوة 2: مضلعات البارسلات) (افتراضي)" 
+                                                 IsChecked="{Binding IsStep3SourcePreviousStep, Mode=TwoWay}" 
+                                                 GroupName="Step3SourceGroup" Margin="0,0,16,0" FontWeight="Bold"/>
+                                    <RadioButton Content="بياناتي الخاصة (My own data)" 
+                                                 IsChecked="{Binding IsStep3SourceOwnData, Mode=TwoWay}" 
+                                                 GroupName="Step3SourceGroup" FontWeight="SemiBold"/>
+                                </StackPanel>
 
-                                <TextBlock Text="📁 أو استعراض Feature Class من Geodatabase (.gdb) / Shapefile:" FontSize="9.5" FontWeight="Bold" Foreground="#38BDF8" Margin="0,2,0,3"/>
-                                <Grid Margin="0,0,0,2">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBox Grid.Column="0" Text="{Binding CustomSchemaDataPath, UpdateSourceTrigger=PropertyChanged}" 
-                                             Style="{StaticResource ModernTextBox}" Height="24" FontSize="9.5" Margin="0,0,4,0"
-                                             Tag="مسار Feature Class أو اسم الطبقة المحددة..."/>
-                                    <Button Grid.Column="1" Content="📂 استعراض Feature Class" Command="{Binding BrowseFeatureClassCommand}" 
-                                            Height="24" Padding="8,1" Margin="0,0,3,0" Background="#0284C7" Foreground="White" FontSize="9" FontWeight="SemiBold"
-                                            ToolTip="استعراض واختيار Feature Class مباشرة من داخل أي File Geodatabase (.gdb) عبر متصفح ArcGIS Pro الرسمي"/>
-                                    <Button Grid.Column="2" Content="📄 ملف خارجي" Command="{Binding BrowseCustomFileCommand}" 
-                                            Height="24" Padding="6,1" Margin="0" Background="#334155" Foreground="White" FontSize="9"
-                                            ToolTip="استعراض ملف Shapefile أو Excel خارجي"/>
-                                </Grid>
+                                <!-- Read-only Source Summary & Actions -->
+                                <Border Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,0,0,4">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Step3SourceSummary}" Foreground="#F8FAFC" FontSize="9.5" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="6,0,0,0">
+                                            <Button Content="📁 فتح المجلد" Command="{Binding OpenStepFolderCommand}" CommandParameter="3" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
+                                            <Button Content="🗺️ إضافة إلى الخريطة" Command="{Binding AddStepSourceToMapCommand}" CommandParameter="3" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Own Data Browse Panel (Visible only when IsStep3SourceOwnData is true) -->
+                                <Border Background="#101726" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,2,0,4"
+                                        Visibility="{Binding IsStep3SourceOwnData, Converter={StaticResource BoolToVis}}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Grid.Column="0" Text="{Binding Step3OwnDataPath, UpdateSourceTrigger=PropertyChanged}" 
+                                                 Style="{StaticResource ModernTextBox}" Height="24" FontSize="9.5" Margin="0,0,4,0"
+                                                 Tag="مسار ملف Shapefile أو Feature Class للبارسلات..."/>
+                                        <Button Grid.Column="1" Content="📂 استعراض..." Command="{Binding BrowseOwnDataCommand}" CommandParameter="3"
+                                                Height="24" Padding="8,1" Background="#0284C7" Foreground="White" FontSize="9.5" FontWeight="SemiBold"/>
+                                    </Grid>
+                                </Border>
                             </StackPanel>
                         </Border>
 
@@ -1422,82 +1366,48 @@
                         <TextBlock Text="Sub-parcels never get dimensions. Directions: 1=North (شمال), 2=East (شرق), 3=South (جنوب), 4=West (غرب)." FontSize="10" Foreground="#94A3B8" Margin="0,0,0,6"/>
 
                         <!-- Part B: Working Source Card & Edits Banner -->
+                        <!-- Step 4 Working Data Source (Exactly 2 Options: PreviousStep, OwnData) -->
                         <Border Background="#1E293B" BorderBrush="#0EA5E9" BorderThickness="1.2" CornerRadius="6" Padding="8" Margin="0,0,0,8">
                             <StackPanel>
                                 <TextBlock Text="مصدر البيانات قيد المعالجة (Working Data Source):" FontWeight="Bold" Foreground="#38BDF8" FontSize="11" Margin="0,0,0,4"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <RadioButton Content="أحدث تصدير يشمل تعديلاتي (Latest export)" 
-                                                 IsChecked="{Binding IsSourceFromLatestExport, Mode=TwoWay}" 
-                                                 GroupName="Tab4SourceGroup" Margin="0,0,12,0" FontWeight="SemiBold"/>
-                                    <RadioButton Content="جلسة العمل الحالية (Session data)" 
-                                                 IsChecked="{Binding IsSourceFromSession, Mode=TwoWay}" 
-                                                 GroupName="Tab4SourceGroup" Margin="0,0,12,0" FontWeight="SemiBold"/>
-                                    <RadioButton Content="بياناتي الخاصة (User own data)" 
-                                                 IsChecked="{Binding IsSourceFromCustom, Mode=TwoWay}" 
-                                                 GroupName="Tab4SourceGroup" FontWeight="SemiBold"/>
+                                    <RadioButton Content="مخرجات الخطوة السابقة (الخطوة 3: PARCEL_Approved_Schema) (افتراضي)" 
+                                                 IsChecked="{Binding IsStep4SourcePreviousStep, Mode=TwoWay}" 
+                                                 GroupName="Step4SourceGroup" Margin="0,0,16,0" FontWeight="Bold"/>
+                                    <RadioButton Content="بياناتي الخاصة (My own data)" 
+                                                 IsChecked="{Binding IsStep4SourceOwnData, Mode=TwoWay}" 
+                                                 GroupName="Step4SourceGroup" FontWeight="SemiBold"/>
                                 </StackPanel>
 
-                                <!-- Working From Summary Header with Actions -->
+                                <!-- Read-only Source Summary & Actions -->
                                 <Border Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,0,0,4">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{Binding WorkingFromSummary}" Foreground="#F8FAFC" FontSize="9.5" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                        <TextBlock Grid.Column="0" Text="{Binding Step4SourceSummary}" Foreground="#F8FAFC" FontSize="9.5" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap"/>
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="6,0,0,0">
-                                            <Button Content="📁 فتح المجلد" Command="{Binding OpenExportFolderCommand}" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
-                                            <Button Content="🔄 تغيير / استعراض" Command="{Binding ChangeSourceCommand}" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
-                                            <ComboBox ItemsSource="{Binding ExportHistoryItems}" SelectedItem="{Binding SelectedHistoryItem, Mode=TwoWay}"
-                                                      DisplayMemberPath="Timestamp" Width="105" Height="22" FontSize="9"
-                                                      Style="{StaticResource DarkComboBoxStyle}" ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"
-                                                      ToolTip="سجل التصديرات السابقة (Export History)"/>
+                                            <Button Content="📁 فتح المجلد" Command="{Binding OpenStepFolderCommand}" CommandParameter="4" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
+                                            <Button Content="🗺️ إضافة إلى الخريطة" Command="{Binding AddStepSourceToMapCommand}" CommandParameter="4" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
 
-                                <!-- Custom Data Source Selection Panel (Map Layer or GDB Feature Class) -->
+                                <!-- Own Data Browse Panel (Visible only when IsStep4SourceOwnData is true) -->
                                 <Border Background="#101726" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,2,0,4"
-                                        Visibility="{Binding IsSourceFromCustom, Converter={StaticResource BoolToVis}}">
-                                    <StackPanel>
-                                        <TextBlock Text="🎯 اختيار طبقة من محتويات الخريطة (Map Contents Layer):" FontSize="9.5" FontWeight="Bold" Foreground="#38BDF8" Margin="0,0,0,3"/>
-                                        <Grid Margin="0,0,0,4">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <ComboBox Grid.Column="0" ItemsSource="{Binding AvailableMapPolygonLayers}" SelectedItem="{Binding SelectedMapLayer, Mode=TwoWay}"
-                                                      DisplayMemberPath="DisplayText" Height="24" FontSize="9.5"
-                                                      Style="{StaticResource DarkComboBoxStyle}" ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"/>
-                                            <Button Grid.Column="1" Content="🔄 تحديث الخريطة" Command="{Binding RefreshMapLayersCommand}" 
-                                                    Height="24" Padding="6,1" Margin="4,0,0,0" Background="#334155" Foreground="White" FontSize="9"
-                                                    ToolTip="تحديث قائمة الطبقات من محتويات الخريطة النشطة"/>
-                                        </Grid>
-
-                                        <TextBlock Text="📁 أو استعراض Feature Class من Geodatabase (.gdb) / Shapefile:" FontSize="9.5" FontWeight="Bold" Foreground="#38BDF8" Margin="0,2,0,3"/>
-                                        <Grid Margin="0,0,0,2">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <TextBox Grid.Column="0" Text="{Binding CustomSchemaDataPath, UpdateSourceTrigger=PropertyChanged}" 
-                                                     Style="{StaticResource ModernTextBox}" Height="24" FontSize="9.5" Margin="0,0,4,0"
-                                                     Tag="مسار Feature Class أو اسم الطبقة المحددة..."/>
-                                            <Button Grid.Column="1" Content="📂 استعراض Feature Class" Command="{Binding BrowseFeatureClassCommand}" 
-                                                    Height="24" Padding="8,1" Margin="0,0,3,0" Background="#0284C7" Foreground="White" FontSize="9" FontWeight="SemiBold"
-                                                    ToolTip="استعراض واختيار Feature Class مباشرة من داخل أي File Geodatabase (.gdb) عبر متصفح ArcGIS Pro الرسمي"/>
-                                            <Button Grid.Column="2" Content="📄 ملف خارجي" Command="{Binding BrowseCustomFileCommand}" 
-                                                    Height="24" Padding="6,1" Margin="0" Background="#334155" Foreground="White" FontSize="9"
-                                                    ToolTip="استعراض ملف Shapefile أو Excel خارجي"/>
-                                        </Grid>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Missing Export Path Warning (Section B6) -->
-                                <Border Background="#7C2D12" BorderBrush="#EA580C" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,2,0,4"
-                                        Visibility="{Binding IsWorkingFromMissing, Converter={StaticResource BoolToVis}}">
-                                    <TextBlock Text="{Binding WorkingFromMissingWarning}" Foreground="#FED7AA" FontSize="9.5" FontWeight="Bold" TextWrapping="Wrap"/>
+                                        Visibility="{Binding IsStep4SourceOwnData, Converter={StaticResource BoolToVis}}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Grid.Column="0" Text="{Binding Step4OwnDataPath, UpdateSourceTrigger=PropertyChanged}" 
+                                                 Style="{StaticResource ModernTextBox}" Height="24" FontSize="9.5" Margin="0,0,4,0"
+                                                 Tag="مسار ملف Shapefile أو Feature Class للبارسلات..."/>
+                                        <Button Grid.Column="1" Content="📂 استعراض..." Command="{Binding BrowseOwnDataCommand}" CommandParameter="4"
+                                                Height="24" Padding="8,1" Background="#0284C7" Foreground="White" FontSize="9.5" FontWeight="SemiBold"/>
+                                    </Grid>
                                 </Border>
 
                                 <!-- Edited After Export Banner (Section B4) -->
@@ -1634,76 +1544,48 @@
                         <TextBlock Text="Deliverables &amp; Format Options" FontWeight="SemiBold" Foreground="#F8FAFC" Margin="0,0,0,4"/>
 
                         <!-- Step 5 Working Data Source Selector (Part B) -->
+                        <!-- Step 5 Working Data Source (Exactly 2 Options: PreviousStep, OwnData) -->
                         <Border Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1.2" CornerRadius="6" Padding="8" Margin="0,0,0,8">
                             <StackPanel>
-                                <TextBlock Text="مصدر بيانات التصدير والتدقيق (Export Data Source):" FontWeight="Bold" Foreground="#38BDF8" FontSize="11" Margin="0,0,0,4"/>
+                                <TextBlock Text="مصدر بيانات التصدير النهائي والتدقيق (Export Data Source):" FontWeight="Bold" Foreground="#38BDF8" FontSize="11" Margin="0,0,0,4"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <RadioButton Content="أحدث تصدير يشمل تعديلاتي (Latest export)" 
-                                                 IsChecked="{Binding IsSourceFromLatestExport, Mode=TwoWay}" 
-                                                 GroupName="Tab5SourceGroup" Margin="0,0,12,0" FontWeight="SemiBold"/>
-                                    <RadioButton Content="جلسة العمل الحالية (Session data)" 
-                                                 IsChecked="{Binding IsSourceFromSession, Mode=TwoWay}" 
-                                                 GroupName="Tab5SourceGroup" Margin="0,0,12,0" FontWeight="SemiBold"/>
-                                    <RadioButton Content="استخدام بياناتي الخاصة (Use My Own Data)" 
-                                                 IsChecked="{Binding IsSourceFromCustom, Mode=TwoWay}" 
-                                                 GroupName="Tab5SourceGroup" FontWeight="SemiBold"/>
+                                    <RadioButton Content="مخرجات الخطوة السابقة (الخطوة 3 و 4 المعتمدة) (افتراضي)" 
+                                                 IsChecked="{Binding IsStep5SourcePreviousStep, Mode=TwoWay}" 
+                                                 GroupName="Step5SourceGroup" Margin="0,0,16,0" FontWeight="Bold"/>
+                                    <RadioButton Content="بياناتي الخاصة (My own data)" 
+                                                 IsChecked="{Binding IsStep5SourceOwnData, Mode=TwoWay}" 
+                                                 GroupName="Step5SourceGroup" FontWeight="SemiBold"/>
                                 </StackPanel>
 
-                                <!-- Working From Summary Bar -->
+                                <!-- Read-only Source Summary & Actions -->
                                 <Border Background="#0F172A" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,0,0,4">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{Binding WorkingFromSummary}" Foreground="#F8FAFC" FontSize="9.5" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                        <TextBlock Grid.Column="0" Text="{Binding Step5SourceSummary}" Foreground="#F8FAFC" FontSize="9.5" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap"/>
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="6,0,0,0">
-                                            <Button Content="📁 فتح المجلد" Command="{Binding OpenExportFolderCommand}" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
-                                            <Button Content="🔄 تغيير / استعراض" Command="{Binding ChangeSourceCommand}" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
-                                            <ComboBox ItemsSource="{Binding ExportHistoryItems}" SelectedItem="{Binding SelectedHistoryItem, Mode=TwoWay}"
-                                                      DisplayMemberPath="Timestamp" Width="105" Height="22" FontSize="9"
-                                                      Style="{StaticResource DarkComboBoxStyle}" ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"
-                                                      ToolTip="سجل التصديرات السابقة (Export History)"/>
+                                            <Button Content="📁 فتح المجلد" Command="{Binding OpenStepFolderCommand}" CommandParameter="5" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
+                                            <Button Content="🗺️ إضافة إلى الخريطة" Command="{Binding AddStepSourceToMapCommand}" CommandParameter="5" Height="22" Padding="6,1" Margin="0,0,3,0" Background="#334155" FontSize="9.5"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
 
-                                <!-- Custom Data Source Selection Panel (Map Layer or GDB Feature Class) -->
+                                <!-- Own Data Browse Panel (Visible only when IsStep5SourceOwnData is true) -->
                                 <Border Background="#101726" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="4" Padding="6" Margin="0,2,0,4"
-                                        Visibility="{Binding IsSourceFromCustom, Converter={StaticResource BoolToVis}}">
-                                    <StackPanel>
-                                        <TextBlock Text="🎯 اختيار طبقة من محتويات الخريطة (Map Contents Layer):" FontSize="9.5" FontWeight="Bold" Foreground="#38BDF8" Margin="0,0,0,3"/>
-                                        <Grid Margin="0,0,0,4">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <ComboBox Grid.Column="0" ItemsSource="{Binding AvailableMapPolygonLayers}" SelectedItem="{Binding SelectedMapLayer, Mode=TwoWay}"
-                                                      DisplayMemberPath="DisplayText" Height="24" FontSize="9.5"
-                                                      Style="{StaticResource DarkComboBoxStyle}" ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"/>
-                                            <Button Grid.Column="1" Content="🔄 تحديث الخريطة" Command="{Binding RefreshMapLayersCommand}" 
-                                                    Height="24" Padding="6,1" Margin="4,0,0,0" Background="#334155" Foreground="White" FontSize="9"
-                                                    ToolTip="تحديث قائمة الطبقات من محتويات الخريطة النشطة"/>
-                                        </Grid>
-
-                                        <TextBlock Text="📁 أو استعراض Feature Class من Geodatabase (.gdb) / Shapefile:" FontSize="9.5" FontWeight="Bold" Foreground="#38BDF8" Margin="0,2,0,3"/>
-                                        <Grid Margin="0,0,0,2">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <TextBox Grid.Column="0" Text="{Binding CustomSchemaDataPath, UpdateSourceTrigger=PropertyChanged}" 
-                                                     Style="{StaticResource ModernTextBox}" Height="24" FontSize="9.5" Margin="0,0,4,0"
-                                                     Tag="مسار Feature Class أو اسم الطبقة المحددة..."/>
-                                            <Button Grid.Column="1" Content="📂 استعراض Feature Class" Command="{Binding BrowseFeatureClassCommand}" 
-                                                    Height="24" Padding="8,1" Margin="0,0,3,0" Background="#0284C7" Foreground="White" FontSize="9" FontWeight="SemiBold"
-                                                    ToolTip="استعراض واختيار Feature Class مباشرة من داخل أي File Geodatabase (.gdb) عبر متصفح ArcGIS Pro الرسمي"/>
-                                            <Button Grid.Column="2" Content="📄 ملف خارجي" Command="{Binding BrowseCustomFileCommand}" 
-                                                    Height="24" Padding="6,1" Margin="0" Background="#334155" Foreground="White" FontSize="9"
-                                                    ToolTip="استعراض ملف Shapefile أو Excel خارجي"/>
-                                        </Grid>
-                                    </StackPanel>
+                                        Visibility="{Binding IsStep5SourceOwnData, Converter={StaticResource BoolToVis}}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Grid.Column="0" Text="{Binding Step5OwnDataPath, UpdateSourceTrigger=PropertyChanged}" 
+                                                 Style="{StaticResource ModernTextBox}" Height="24" FontSize="9.5" Margin="0,0,4,0"
+                                                 Tag="مسار ملف Shapefile أو Feature Class للبارسلات..."/>
+                                        <Button Grid.Column="1" Content="📂 استعراض..." Command="{Binding BrowseOwnDataCommand}" CommandParameter="5"
+                                                Height="24" Padding="8,1" Background="#0284C7" Foreground="White" FontSize="9.5" FontWeight="SemiBold"/>
+                                    </Grid>
                                 </Border>
                             </StackPanel>
                         </Border>

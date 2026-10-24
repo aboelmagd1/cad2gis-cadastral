@@ -239,8 +239,10 @@ public static class OutwardRaySensor
                 else
                 {
                     borderRec.IsInferred = true;
-                    borderRec.Descriptio = "UNKNOWN";
-                    borderRec.BorderType = "STR";
+                    borderRec.IsUnknown = true;
+                    borderRec.ReviewStatus = "RequiresReview";
+                    borderRec.Descriptio = "";
+                    borderRec.BorderType = "";
                 }
             }
         }

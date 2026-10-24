@@ -99,8 +99,9 @@ public class SyntheticDatasetAndAddendumTests
         WidthInferenceService.InferBorderWidth(border, seg, normal, emptyObstacles, options);
 
         Assert.True(border.IsInferred);
+        Assert.True(border.IsUnknown);
         Assert.Null(border.MeasuredWidth);
-        Assert.Equal("UNKNOWN", border.Descriptio);
+        Assert.Equal("", border.Descriptio);
     }
 
     [Fact]

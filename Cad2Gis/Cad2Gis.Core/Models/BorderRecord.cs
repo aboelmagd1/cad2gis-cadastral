@@ -28,6 +28,8 @@ public class BorderRecord
     public string? InferenceRule { get; set; }
     public List<double> RayLengths { get; set; } = new();
     public bool IsAccepted { get; set; } = true;
+    public bool IsUnknown { get; set; } = false;
+    public string ReviewStatus { get; set; } = string.Empty;
 
     public string BorderNameArabic => BorderName switch
     {

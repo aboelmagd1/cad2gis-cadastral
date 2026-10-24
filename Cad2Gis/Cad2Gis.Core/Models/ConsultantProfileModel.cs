@@ -48,7 +48,7 @@ public class ConsultantProfileModel
     public bool TrueNorthCorrection { get; set; } = true;
 
     // Part B: Continue from Latest Export Settings
-    public bool ContinueFromLatestExport { get; set; } = true;
+    public bool ContinueFromLatestExport { get; set; } = false;
     public int MaxExportHistoryCount { get; set; } = 10;
 
     // Geometry Preservation Settings

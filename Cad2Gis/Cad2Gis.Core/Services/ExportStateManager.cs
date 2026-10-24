@@ -22,9 +22,17 @@ public static class ExportStateManager
 
     /// <summary>
     /// Writes or updates last_export.json with the new export record, preserving a history of the last N exports.
+    /// Returns true on success, or false with an errorMessage if saving fails.
     /// </summary>
-    public static void SaveExportState(string stateFilePath, ExportStateRecord newState, int maxHistoryCount = 10)
+    public static bool TrySaveExportState(string stateFilePath, ExportStateRecord newState, int maxHistoryCount, out string? errorMessage)
     {
+        errorMessage = null;
+        if (newState == null)
+        {
+            errorMessage = "New state record cannot be null.";
+            return false;
+        }
+
         try
         {
             string? dir = Path.GetDirectoryName(stateFilePath);
@@ -62,11 +70,32 @@ public static class ExportStateManager
             newState.History = history.Take(Math.Max(1, maxHistoryCount)).ToList();
 
             string json = JsonSerializer.Serialize(newState, JsonOpts);
-            File.WriteAllText(stateFilePath, json);
+            string tmpFile = stateFilePath + ".tmp_" + Guid.NewGuid().ToString("N");
+            File.WriteAllText(tmpFile, json);
+            if (File.Exists(stateFilePath))
+            {
+                File.Delete(stateFilePath);
+            }
+            File.Move(tmpFile, stateFilePath);
+            return true;
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[ExportStateManager] SaveExportState failed: {ex.Message}");
+            errorMessage = ex.Message;
+            System.Diagnostics.Debug.WriteLine($"[ExportStateManager] TrySaveExportState failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Writes or updates last_export.json with the new export record, preserving a history of the last N exports.
+    /// Throws an IOException if saving fails.
+    /// </summary>
+    public static void SaveExportState(string stateFilePath, ExportStateRecord newState, int maxHistoryCount = 10)
+    {
+        if (!TrySaveExportState(stateFilePath, newState, maxHistoryCount, out var err))
+        {
+            throw new IOException($"Failed saving export state to '{stateFilePath}': {err}");
         }
     }
 

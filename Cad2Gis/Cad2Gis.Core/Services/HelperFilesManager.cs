@@ -40,7 +40,7 @@ public class ToolSettings
     public bool TrueNorthCorrection { get; set; } = true;
 
     // Part B: Continue from Latest Export Settings
-    public bool ContinueFromLatestExport { get; set; } = true;
+    public bool ContinueFromLatestExport { get; set; } = false;
     public int MaxExportHistoryCount { get; set; } = 10;
 
     // Geometry Preservation Settings
@@ -105,6 +105,7 @@ public class HelperFilesManager
     public string StateDir => Path.Combine(HelperFilesRoot, "state");
     public string ScratchDir => Path.Combine(HelperFilesRoot, "scratch");
     public string LastExportStateFile => Path.Combine(StateDir, "last_export.json");
+    public string PipelineStateFile => Path.Combine(StateDir, "pipeline_state.json");
     public string SettingsFile => Path.Combine(HelperFilesRoot, "settings.json");
     public string LandUseTemplateExcel => Path.Combine(HelperFilesRoot, "PARCEs_landuse.xlsx");
 

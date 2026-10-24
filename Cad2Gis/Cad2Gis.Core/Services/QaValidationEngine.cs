@@ -190,7 +190,7 @@ public static class QaValidationEngine
             if (b.ShapeLength <= 0.001)
                 result.AddError("Border", b.PlotId, "SHAPE_Leng", $"Border length ({b.ShapeLength}) must be greater than zero.");
 
-            if (string.IsNullOrWhiteSpace(b.Descriptio) || b.Descriptio == "UNKNOWN")
+            if (b.IsUnknown || string.IsNullOrWhiteSpace(b.Descriptio) || b.Descriptio == "UNKNOWN")
             {
                 result.AddWarning("Border", b.PlotId, "DESCRIPTIO", "Arabic DESCRIPTIO is UNKNOWN or empty (unresolved neighbor/street width).");
             }

@@ -28,7 +28,7 @@ public class BorderExtractionOptions
 
     /// <summary>
     /// If true, reflex (concave) corners with interior angles in [360 - AMaxDeg, 360 - AMinDeg]
-    /// (default 230°..340°) are also treated as split points.
+    /// (default 200°..350°) are also treated as split points.
     /// Default: true.
     /// </summary>
     public bool IncludeReflexCorners { get; set; } = true;

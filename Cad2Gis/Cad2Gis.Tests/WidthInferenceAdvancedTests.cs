@@ -109,9 +109,10 @@ public class WidthInferenceAdvancedTests
 
         WidthInferenceService.InferBorderWidth(border, dimSegment, normal, obstacles, options);
 
-        Assert.Equal("UNKNOWN", border.BorderType);
+        Assert.True(border.IsUnknown);
+        Assert.Equal("", border.BorderType);
         Assert.Null(border.MeasuredWidth);
-        Assert.Equal("UNKNOWN", border.Descriptio);
+        Assert.Equal("", border.Descriptio);
         Assert.True(border.IsInferred); // Must be flagged inferred to appear in review table
     }
 

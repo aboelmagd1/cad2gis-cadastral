@@ -99,16 +99,18 @@ public class CadExtractionAndExpectedLayersTests
         Assert.Equal("Sub-Parcels / Utilities", CadLayerInfo.DetermineCategory(LayerRole.Service, "SERVICE_LANE"));
         Assert.Equal("Sub-Parcels / Utilities", CadLayerInfo.DetermineCategory(LayerRole.Service, "UTILITY_EASEMENT"));
         Assert.Equal("Sub-Parcels / Utilities", CadLayerInfo.DetermineCategory(LayerRole.Service, "garden"));
+        Assert.Equal("Sub-Parcels / Utilities", CadLayerInfo.DetermineCategory(LayerRole.Street, "boundary roads"));
+        Assert.Equal("Sub-Parcels / Utilities", CadLayerInfo.DetermineCategory(LayerRole.Street, "ممرات"));
 
         // 3. Text & Annotations
         Assert.Equal("Text & Annotations", CadLayerInfo.DetermineCategory(LayerRole.PlotText, "number"));
         Assert.Equal("Text & Annotations", CadLayerInfo.DetermineCategory(LayerRole.Dimensions, "DIM"));
         Assert.Equal("Text & Annotations", CadLayerInfo.DetermineCategory(LayerRole.UsageText, "استعمالات_الاراضي"));
 
-        // 4. Roads & References
-        Assert.Equal("Roads & References", CadLayerInfo.DetermineCategory(LayerRole.Street, "boundary roads"));
-        Assert.Equal("Roads & References", CadLayerInfo.DetermineCategory(LayerRole.WaterChannel, "water canals"));
-        Assert.Equal("Roads & References", CadLayerInfo.DetermineCategory(LayerRole.Ignore, "التنظيم"));
+        // 4. Ignore Layers (Tab 4)
+        Assert.Equal("Ignore Layers", CadLayerInfo.DetermineCategory(LayerRole.WaterChannel, "water canals"));
+        Assert.Equal("Ignore Layers", CadLayerInfo.DetermineCategory(LayerRole.Ignore, "التنظيم"));
+        Assert.Equal("Ignore Layers", CadLayerInfo.DetermineCategory(LayerRole.Ignore, "other layer"));
     }
 
     [Fact]
@@ -247,20 +249,42 @@ public class CadExtractionAndExpectedLayersTests
     }
 
     [Fact]
-    public void RoadsAndReferences_AreIgnoredByDefault()
+    public void IgnoreLayers_AreIgnoredByDefault()
     {
-        var roadLayer = new CadLayerInfo
+        var ignoreLayer = new CadLayerInfo
         {
-            LayerName = "boundary roads",
-            Category = "Roads & References",
+            LayerName = "random_ignored_lines",
+            Category = "Ignore Layers",
             Role = LayerRole.Ignore,
             IsSelected = false
         };
 
-        // All scopes must ignore Roads & References when Role is Ignore or IsSelected is false
-        Assert.False(PolygonLayerScopeService.IsLayerEligible(roadLayer, PolygonLayerScopeService.ScopeMainAndSub));
-        Assert.False(PolygonLayerScopeService.IsLayerEligible(roadLayer, PolygonLayerScopeService.ScopeMainOnly));
-        Assert.False(PolygonLayerScopeService.IsLayerEligible(roadLayer, PolygonLayerScopeService.ScopeAllExceptText));
+        // All scopes must ignore Ignore Layers when Role is Ignore or IsSelected is false
+        Assert.False(PolygonLayerScopeService.IsLayerEligible(ignoreLayer, PolygonLayerScopeService.ScopeMainAndSub));
+        Assert.False(PolygonLayerScopeService.IsLayerEligible(ignoreLayer, PolygonLayerScopeService.ScopeMainOnly));
+        Assert.False(PolygonLayerScopeService.IsLayerEligible(ignoreLayer, PolygonLayerScopeService.ScopeAllExceptText));
+    }
+
+    [Fact]
+    public void StreetRole_TransfersToSubParcelsCategory_AndIsNotMainParcel()
+    {
+        var layer = new CadLayerInfo
+        {
+            LayerName = "street_corridor_01",
+            Role = LayerRole.Boundary // Initially Boundary
+        };
+        Assert.Equal("Main Parcels", layer.Category);
+
+        // When user sets role to Street (e.g. for corridors / streets)
+        layer.Role = LayerRole.Street;
+
+        // Must automatically transfer to Sub-Parcels / Utilities
+        Assert.Equal("Sub-Parcels / Utilities", layer.Category);
+
+        // Sub-parcels are eligible under Main & Sub scope, but NOT under Main Only
+        layer.IsSelected = true;
+        Assert.True(PolygonLayerScopeService.IsLayerEligible(layer, PolygonLayerScopeService.ScopeMainAndSub));
+        Assert.False(PolygonLayerScopeService.IsLayerEligible(layer, PolygonLayerScopeService.ScopeMainOnly));
     }
 
     [Fact]
