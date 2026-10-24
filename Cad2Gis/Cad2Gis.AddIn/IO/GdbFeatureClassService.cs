@@ -1553,16 +1553,26 @@ public static class GdbFeatureClassService
         return (borders, geometries, wasCopied, notice);
     }
 
+    private static void RemoveMapLayersNamed(Map map, IEnumerable<string> names)
+    {
+        var nameSet = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+        var toRemove = map.GetLayersAsFlattenedList().Where(l => nameSet.Contains(l.Name)).ToList();
+        foreach (var l in toRemove)
+        {
+            try { map.RemoveLayer(l); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// One layer per output. Any existing layer with the same caption (and the legacy captions
+    /// "{fc} Live GDB", "{fc} GDB", "{fc} Final GDB") is removed and the layer is re-created from the current
+    /// data source, so it never points to a deleted or re-created feature class. Must run on the MCT (QueuedTask).
+    /// </summary>
     public static Layer? AddOrRefreshMapLayer(Map? map, string gdbPath, string fcName, string caption)
     {
         if (map == null) return null;
 
-        var existing = map.GetLayersAsFlattenedList().FirstOrDefault(l => l.Name.Equals(caption, StringComparison.OrdinalIgnoreCase));
-        if (existing != null)
-        {
-            existing.ClearDisplayCache();
-            return existing;
-        }
+        RemoveMapLayersNamed(map, new[] { caption, $"{fcName} Live GDB", $"{fcName} GDB", $"{fcName} Final GDB" });
 
         try
         {
@@ -1576,6 +1586,40 @@ public static class GdbFeatureClassService
             System.Diagnostics.Debug.WriteLine($"[AddOrRefreshMapLayer] Error adding '{caption}': {ex.Message}");
             return null;
         }
+    }
+
+    /// <summary>Adds a shapefile to the map (replacing any layer with the same caption). Must run on the MCT.</summary>
+    public static Layer? AddShapefileToMap(Map? map, string shapefilePath, string caption)
+    {
+        if (map == null || string.IsNullOrWhiteSpace(shapefilePath) || !File.Exists(shapefilePath)) return null;
+
+        RemoveMapLayersNamed(map, new[] { caption });
+
+        try
+        {
+            var layer = LayerFactory.Instance.CreateLayer(new Uri(shapefilePath), map, -1, caption);
+            layer?.SetName(caption);
+            return layer;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[AddShapefileToMap] Error adding '{caption}': {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Step 5 map outputs: exactly four layers, PARCEL and BORDER from Final.gdb and PARCEL and BORDER from the
+    /// Final shapefiles. Must run on the MCT.
+    /// </summary>
+    public static void AddFinalOutputsToMap(Map? map, string finalGdbPath, string parcelFcName, string borderFcName,
+                                            string parcelShpPath, string borderShpPath)
+    {
+        if (map == null) return;
+        AddOrRefreshMapLayer(map, finalGdbPath, parcelFcName, "PARCEL (Final GDB)");
+        AddOrRefreshMapLayer(map, finalGdbPath, borderFcName, "BORDER (Final GDB)");
+        AddShapefileToMap(map, parcelShpPath, "PARCEL (Final Shapefile)");
+        AddShapefileToMap(map, borderShpPath, "BORDER (Final Shapefile)");
     }
 
     public static async Task WriteDeviatingParcelsToFeatureClassAsync(
@@ -1710,7 +1754,7 @@ public static class GdbFeatureClassService
         await ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() =>
         {
             WriteParcelsToFeatureClass(gdbPath, fcName, parcels, geoms);
-            AddOrRefreshMapLayer(MapView.Active?.Map, gdbPath, fcName, $"{fcName} GDB");
+            AddOrRefreshMapLayer(MapView.Active?.Map, gdbPath, fcName, fcName);
         });
     }
 
@@ -1727,7 +1771,7 @@ public static class GdbFeatureClassService
         await ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() =>
         {
             WriteBordersToFeatureClass(gdbPath, fcName, borders, geoms);
-            AddOrRefreshMapLayer(MapView.Active?.Map, gdbPath, fcName, $"{fcName} GDB");
+            AddOrRefreshMapLayer(MapView.Active?.Map, gdbPath, fcName, fcName);
         });
     }
 

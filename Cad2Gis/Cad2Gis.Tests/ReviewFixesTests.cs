@@ -493,5 +493,34 @@ public class ReviewFixesTests : IDisposable
         Assert.Equal(step3FcPath, restoredStep3.Path);
         Assert.Contains("PARCEL_Approved_Schema", restoredStep3.Path);
     }
+
+    [Fact]
+    public void RingSignedArea_TwoArcCircle_ClockwiseIsNegative_AndEqualsTwiceTheCircleArea()
+    {
+        double r = 10.0, halfCirc = Math.PI * r;
+        var upper = new CoreBoundarySegment(new Point2D(-r, 0), new Point2D(r, 0), CurveType.CircularArc, halfCirc)
+        { Center = new Point2D(0, 0), Radius = r, IsCounterClockwise = false };
+        var lower = new CoreBoundarySegment(new Point2D(r, 0), new Point2D(-r, 0), CurveType.CircularArc, halfCirc)
+        { Center = new Point2D(0, 0), Radius = r, IsCounterClockwise = false };
+
+        double twiceArea = BorderExtractionCore.ComputeRingSignedArea(new List<CoreBoundarySegment> { upper, lower });
+
+        // chord-only shoelace would give 0 here; with the arc caps it is -2 * pi * r^2 (clockwise)
+        Assert.Equal(-2.0 * Math.PI * r * r, twiceArea, 3);
+    }
+
+    [Fact]
+    public void RingSignedArea_TwoArcCircle_CounterClockwiseIsPositive()
+    {
+        double r = 10.0, halfCirc = Math.PI * r;
+        var a = new CoreBoundarySegment(new Point2D(r, 0), new Point2D(-r, 0), CurveType.CircularArc, halfCirc)
+        { Center = new Point2D(0, 0), Radius = r, IsCounterClockwise = true };
+        var b = new CoreBoundarySegment(new Point2D(-r, 0), new Point2D(r, 0), CurveType.CircularArc, halfCirc)
+        { Center = new Point2D(0, 0), Radius = r, IsCounterClockwise = true };
+
+        double twiceArea = BorderExtractionCore.ComputeRingSignedArea(new List<CoreBoundarySegment> { a, b });
+
+        Assert.Equal(2.0 * Math.PI * r * r, twiceArea, 3);
+    }
 }
 

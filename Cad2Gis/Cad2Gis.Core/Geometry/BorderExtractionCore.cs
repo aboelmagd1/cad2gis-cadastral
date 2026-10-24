@@ -268,25 +268,7 @@ public static class BorderExtractionCore
 
         // Determine polygon winding and inside-orientation
         // Signed Area of polygon ring using chord endpoints + circular arc contributions (P4.2)
-        double signedArea = 0;
-        for (int i = 0; i < segCount; i++)
-        {
-            var p1 = segments[i].Start;
-            var p2 = segments[i].End;
-            signedArea += (p1.X * p2.Y) - (p2.X * p1.Y);
-
-            if (segments[i].Type == CurveType.CircularArc && segments[i].Radius is double r && r > 1e-6)
-            {
-                double chordLen = p1.DistanceTo(p2);
-                double halfAngle = Math.Asin(Math.Min(1.0, Math.Max(0.0, (chordLen / 2.0) / r)));
-                double theta = 2.0 * halfAngle;
-                double capArea = 0.5 * r * r * (theta - Math.Sin(theta));
-
-                bool isCcwArc = segments[i].IsCounterClockwise ?? true;
-                // In shoelace sum, CCW (left-bulging) adds positive area, CW (right-bulging) adds negative area
-                signedArea += (isCcwArc ? 2.0 : -2.0) * capArea;
-            }
-        }
+        double signedArea = ComputeRingSignedArea(segments);
 
         // In standard GIS:
         // Exterior ring CW (signedArea <= 0) => interior is on the RIGHT
@@ -755,6 +737,34 @@ public static class BorderExtractionCore
         return diff > 180.0 ? 360.0 - diff : diff;
     }
 
+    /// <summary>
+    /// Twice the signed area of a ring (shoelace convention: negative = clockwise, positive = counter-clockwise).
+    /// Uses the chord end points and ADDS the circular-segment area of every arc, so rings made of arcs
+    /// (circles, lenses, rounded shapes) get the correct orientation instead of a zero/ambiguous chord-only area.
+    /// </summary>
+    public static double ComputeRingSignedArea(IReadOnlyList<CoreBoundarySegment> segments)
+    {
+        double signedArea = 0;
+        if (segments == null) return signedArea;
+        for (int i = 0; i < segments.Count; i++)
+        {
+            var p1 = segments[i].Start;
+            var p2 = segments[i].End;
+            signedArea += (p1.X * p2.Y) - (p2.X * p1.Y);
+
+            if (segments[i].Type == CurveType.CircularArc && segments[i].Radius is double r && r > 1e-6)
+            {
+                double chordLen = p1.DistanceTo(p2);
+                double halfAngle = Math.Asin(Math.Min(1.0, Math.Max(0.0, (chordLen / 2.0) / r)));
+                double theta = 2.0 * halfAngle;
+                double capArea = 0.5 * r * r * (theta - Math.Sin(theta));
+                bool isCcwArc = segments[i].IsCounterClockwise ?? true;
+                signedArea += (isCcwArc ? 2.0 : -2.0) * capArea;
+            }
+        }
+        return signedArea;
+    }
+
     public static List<CoreBoundaryVertex> DetectCornerVertices(
         IReadOnlyList<CoreBoundarySegment> segments,
         bool isHole,
@@ -765,13 +775,7 @@ public static class BorderExtractionCore
         if (segments == null || segments.Count == 0) return vertices;
 
         int segCount = segments.Count;
-        double signedArea = 0;
-        for (int i = 0; i < segCount; i++)
-        {
-            var p1 = segments[i].Start;
-            var p2 = segments[i].End;
-            signedArea += (p1.X * p2.Y) - (p2.X * p1.Y);
-        }
+        double signedArea = ComputeRingSignedArea(segments);
         bool insideIsOnRight = isHole ? (signedArea >= 0) : (signedArea <= 0);
 
         for (int i = 0; i < segCount; i++)
