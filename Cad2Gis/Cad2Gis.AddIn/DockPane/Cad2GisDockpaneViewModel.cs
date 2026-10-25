@@ -1718,7 +1718,26 @@ public partial class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contrac
     public string SelectedPlotTextLayer
     {
         get => _selectedPlotTextLayer;
-        set => SetProperty(ref _selectedPlotTextLayer, value);
+        set
+        {
+            if (SetProperty(ref _selectedPlotTextLayer, value))
+            {
+                OnSelectedPlotTextLayerChanged(value);
+            }
+        }
+    }
+
+    private void OnSelectedPlotTextLayerChanged(string? value)
+    {
+        string? clean = PlotIdExtractorService.CleanLayerName(value);
+        if (string.IsNullOrWhiteSpace(clean)) return;
+
+        var matching = CadLayers.FirstOrDefault(l => string.Equals(l.LayerName, clean, StringComparison.OrdinalIgnoreCase));
+        if (matching != null && matching.Role != LayerRole.PlotText)
+        {
+            matching.Role = LayerRole.PlotText;
+            matching.Category = "Text & Annotations";
+        }
     }
 
     // Width Inference & Sensing (Section 3)
@@ -2071,6 +2090,8 @@ public partial class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contrac
     public void UpdatePlotTextLayersList()
     {
         string current = SelectedPlotTextLayer;
+        string? currentRaw = PlotIdExtractorService.CleanLayerName(current);
+
         var list = new List<string> { "(تلقائي من دور الطبقة - PlotText)" };
         foreach (var l in CadLayers)
         {
@@ -2082,14 +2103,20 @@ public partial class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contrac
         AvailablePlotTextLayers.Clear();
         foreach (var item in list) AvailablePlotTextLayers.Add(item);
 
-        if (!string.IsNullOrWhiteSpace(current) && AvailablePlotTextLayers.Contains(current))
+        string? match = AvailablePlotTextLayers.FirstOrDefault(x =>
+            string.Equals(x, current, StringComparison.OrdinalIgnoreCase) ||
+            (!string.IsNullOrEmpty(currentRaw) && string.Equals(PlotIdExtractorService.CleanLayerName(x), currentRaw, StringComparison.OrdinalIgnoreCase)));
+
+        if (match != null)
         {
-            SelectedPlotTextLayer = current;
+            _selectedPlotTextLayer = match;
+            NotifyPropertyChanged(nameof(SelectedPlotTextLayer));
         }
         else
         {
             var ptLayer = CadLayers.FirstOrDefault(l => l.Role == LayerRole.PlotText);
-            SelectedPlotTextLayer = ptLayer != null ? $"{ptLayer.LayerName} (★ PlotText)" : "(تلقائي من دور الطبقة - PlotText)";
+            _selectedPlotTextLayer = ptLayer != null ? $"{ptLayer.LayerName} (★ PlotText)" : "(تلقائي من دور الطبقة - PlotText)";
+            NotifyPropertyChanged(nameof(SelectedPlotTextLayer));
         }
     }
 
@@ -2111,6 +2138,17 @@ public partial class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contrac
         }
         else if (e.PropertyName == nameof(CadLayerInfo.Role) || e.PropertyName == nameof(CadLayerInfo.Category))
         {
+            if (sender is CadLayerInfo cl && cl.Role == LayerRole.PlotText)
+            {
+                string expectedLabel = $"{cl.LayerName} (★ PlotText)";
+                if (!string.Equals(_selectedPlotTextLayer, expectedLabel, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(_selectedPlotTextLayer, cl.LayerName, StringComparison.OrdinalIgnoreCase))
+                {
+                    _selectedPlotTextLayer = expectedLabel;
+                    NotifyPropertyChanged(nameof(SelectedPlotTextLayer));
+                }
+            }
+            UpdatePlotTextLayersList();
             _filteredCadLayers?.Refresh();
             UpdateCadTabCounts();
             NotifyPropertyChanged(nameof(SelectedLayersStatus));

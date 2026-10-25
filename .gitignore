@@ -17,6 +17,7 @@
 !/prompts/
 !/.gitignore
 !/README.md
+!*.esriAddinX
 
 # -----------------------------------------------------------------------------
 # 2. Build Artifacts & Compiler Outputs

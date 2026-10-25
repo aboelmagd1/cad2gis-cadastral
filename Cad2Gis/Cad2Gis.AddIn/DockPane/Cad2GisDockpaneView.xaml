@@ -852,6 +852,26 @@
                             </Grid>
                         </Border>
 
+                        <!-- Plot Text Layer Selector in Step 1 -->
+                        <Border Background="#101726" BorderBrush="#2563EB" BorderThickness="1.2" CornerRadius="6" Padding="8,6" Margin="0,0,0,6">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
+                                    <TextBlock Text="🏷️ طبقة أرقام القطع (Plot Text Layer):" FontWeight="Bold" Foreground="#38BDF8" FontSize="11"/>
+                                    <TextBlock Text="الطبقة المحددة لاستخراج أرقام القطع (Plot ID):" FontSize="9.5" Foreground="#94A3B8"/>
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" Style="{StaticResource DarkComboBoxStyle}"
+                                          ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"
+                                          ItemsSource="{Binding AvailablePlotTextLayers}"
+                                          SelectedItem="{Binding SelectedPlotTextLayer, Mode=TwoWay}"
+                                          Height="26" VerticalAlignment="Center" FontSize="10.5"
+                                          ToolTip="حدد طبقة الكاد التي تحتوي على أرقام القطع (Plot ID). سيتم استخدام هذه الطبقة بشكل أساسي ومستمر لاستخراج أرقام القطع في الخطوة 2."/>
+                            </Grid>
+                        </Border>
+
                         <!-- Proceed to Step 2 Action Button -->
                         <Button Content="الذهاب إلى الخطوة 2: إنشاء واستخراج البارسلات ➔ (Proceed to Step 2: Extract Parcels)" 
                                 Command="{Binding ProceedToStep2Command}" 

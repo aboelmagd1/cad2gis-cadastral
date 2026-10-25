@@ -317,10 +317,24 @@ public partial class Cad2GisDockpaneViewModel
 
                 if (datasetLayers.Count > 0)
                 {
-                    CadLayers.Clear();
-                    foreach (var l in datasetLayers) AddCadLayerWithEvents(l);
+                    var userRoleMap = CadLayers.ToDictionary(l => l.LayerName, l => l.Role, StringComparer.OrdinalIgnoreCase);
+                    var userCatMap = CadLayers.ToDictionary(l => l.LayerName, l => l.Category, StringComparer.OrdinalIgnoreCase);
+                    var userSelectedMap = CadLayers.ToDictionary(l => l.LayerName, l => l.IsSelected, StringComparer.OrdinalIgnoreCase);
+                    var userUsageMap = CadLayers.ToDictionary(l => l.LayerName, l => l.SelectedUsage, StringComparer.OrdinalIgnoreCase);
+                    string savedPlotTextLayer = SelectedPlotTextLayer;
 
-                    // Match with Expected Layers if available
+                    CadLayers.Clear();
+                    foreach (var l in datasetLayers)
+                    {
+                        if (userRoleMap.TryGetValue(l.LayerName, out var role)) l.Role = role;
+                        if (userCatMap.TryGetValue(l.LayerName, out var cat)) l.Category = cat;
+                        if (userSelectedMap.TryGetValue(l.LayerName, out var isSel)) l.IsSelected = isSel;
+                        if (userUsageMap.TryGetValue(l.LayerName, out var usage)) l.SelectedUsage = usage;
+
+                        AddCadLayerWithEvents(l);
+                    }
+
+                    // Match with Expected Layers if available (apply to layers not already customized by user)
                     if (File.Exists(ExpectedLayersExcelPath))
                     {
                         try
@@ -330,7 +344,7 @@ public partial class Cad2GisDockpaneViewModel
                             foreach (var matched in matchReport.CadLayersMatched)
                             {
                                 var target = CadLayers.FirstOrDefault(c => c.LayerName.Equals(matched.CadLayerName, StringComparison.OrdinalIgnoreCase));
-                                if (target != null)
+                                if (target != null && !userRoleMap.ContainsKey(target.LayerName))
                                 {
                                     target.Role = ExpectedLayersService.ParseRole(matched.AssignedRole);
                                     target.Category = CadLayerInfo.DetermineCategory(target.Role, target.LayerName);
@@ -354,6 +368,12 @@ public partial class Cad2GisDockpaneViewModel
                         {
                             candidate.IsSelected = true;
                         }
+                    }
+
+                    UpdatePlotTextLayersList();
+                    if (!string.IsNullOrWhiteSpace(savedPlotTextLayer) && AvailablePlotTextLayers.Contains(savedPlotTextLayer))
+                    {
+                        SelectedPlotTextLayer = savedPlotTextLayer;
                     }
 
                     _filteredCadLayers?.Refresh();

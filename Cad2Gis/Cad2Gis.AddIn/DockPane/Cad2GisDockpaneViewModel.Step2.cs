@@ -668,34 +668,17 @@ public partial class Cad2GisDockpaneViewModel
                         }
 
                         // Resolve target PlotText and Usage layers based on user selection
-                        var targetPlotLayers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        string? explicitPlotLayer = PlotIdExtractorService.CleanLayerName(SelectedPlotTextLayer);
 
-                        // 1. Explicit user selection from ComboBox
-                        if (!string.IsNullOrWhiteSpace(SelectedPlotTextLayer))
-                        {
-                            string rawName = SelectedPlotTextLayer;
-                            int starIdx = rawName.IndexOf(" (★");
-                            if (starIdx > 0) rawName = rawName.Substring(0, starIdx);
-                            rawName = rawName.Trim();
+                        var secondaryPlotLayers = new HashSet<string>(
+                            CadLayers.Where(l => l.Role == LayerRole.PlotText).Select(l => l.LayerName.Trim()),
+                            StringComparer.OrdinalIgnoreCase);
 
-                            if (!rawName.StartsWith("(") && !rawName.Contains("تلقائي"))
-                            {
-                                targetPlotLayers.Add(rawName);
-                            }
-                        }
-
-                        // 2. All layers marked as PlotText in CadLayers table
-                        foreach (var cl in CadLayers.Where(l => l.Role == LayerRole.PlotText))
-                        {
-                            targetPlotLayers.Add(cl.LayerName.Trim());
-                        }
-
-                        // 3. Fallback: Any text layer in CadLayers or inferred as PlotText
-                        if (targetPlotLayers.Count == 0)
+                        if (string.IsNullOrEmpty(explicitPlotLayer) && secondaryPlotLayers.Count == 0)
                         {
                             foreach (var cl in CadLayers.Where(l => l.Category == "Text & Annotations" || CadExtractionService.InferRoleFromName(l.LayerName) == LayerRole.PlotText))
                             {
-                                targetPlotLayers.Add(cl.LayerName.Trim());
+                                secondaryPlotLayers.Add(cl.LayerName.Trim());
                             }
                         }
 
@@ -703,79 +686,49 @@ public partial class Cad2GisDockpaneViewModel
                             CadLayers.Where(l => l.Role == LayerRole.UsageText).Select(l => l.LayerName.Trim()),
                             StringComparer.OrdinalIgnoreCase);
 
-                        // 3. Assign matched annotations to parcels
+                        // Build parcel centers dictionary
+                        var parcelCenters = new Dictionary<long, (double CenterX, double CenterY)>();
                         foreach (var p in _parcels)
                         {
-                            if (!parcelAnnotationsMap.TryGetValue(p.InternalId, out var insideAnnots) || insideAnnots.Count == 0) continue;
-
-                            // Priority 1: Text from user-selected PlotText layer!
-                            var plotNoAnnot = insideAnnots.FirstOrDefault(a => targetPlotLayers.Contains(a.LayerName));
-
-                            // Priority 2: Any text matching plot number format
-                            if (string.IsNullOrWhiteSpace(plotNoAnnot.Text))
+                            if (_parcelGeometries.TryGetValue(p.InternalId, out var polyGeom) && polyGeom != null)
                             {
-                                plotNoAnnot = insideAnnots.FirstOrDefault(a => 
-                                    !targetUsageLayers.Contains(a.LayerName) && 
-                                    IsPlotNumberText(a.Text));
-                            }
-
-                            if (!string.IsNullOrWhiteSpace(plotNoAnnot.Text))
-                            {
-                                p.PlotId = plotNoAnnot.Text.Trim();
-                            }
-                            else if (p.PlotId.StartsWith("P") && int.TryParse(p.PlotId.Substring(1), out _))
-                            {
-                                // Priority 3: Any non-usage annotation inside the parcel
-                                var nonUsage = insideAnnots.FirstOrDefault(a => 
-                                    !targetUsageLayers.Contains(a.LayerName) && 
-                                    !IsUsageText(a.Text));
-                                if (!string.IsNullOrWhiteSpace(nonUsage.Text))
-                                {
-                                    p.PlotId = nonUsage.Text.Trim();
-                                }
-                            }
-
-                            // Usage assignment
-                            var usageAnnot = insideAnnots.FirstOrDefault(a => 
-                                targetUsageLayers.Contains(a.LayerName) ||
-                                CadExtractionService.InferRoleFromName(a.LayerName) == LayerRole.UsageText ||
-                                IsUsageText(a.Text));
-
-                            if (!string.IsNullOrWhiteSpace(usageAnnot.Text))
-                            {
-                                p.Usage = usageAnnot.Text.Trim();
-                                p.UsageText = usageAnnot.Text.Trim();
+                                var center = polyGeom.Extent.Center;
+                                parcelCenters[p.InternalId] = (center.X, center.Y);
                             }
                         }
 
-                        // 4. Proximity matching for any remaining parcels whose PlotId is still dummy (P1, P2...)
-                        var remainingParcels = _parcels.Where(pr => pr.PlotId.StartsWith("P") && int.TryParse(pr.PlotId.Substring(1), out _)).ToList();
-                        if (remainingParcels.Count > 0)
+                        // Flatten all annotations
+                        var allAnnotsFlattened = datasetFeatures.Annotations
+                            .Where(a => a.Location != null && !string.IsNullOrWhiteSpace(a.Text))
+                            .Select(a => (a.Text, a.Location.X, a.Location.Y, a.LayerName));
+
+                        // Execute robust PlotIdExtractorService
+                        var matchReport = PlotIdExtractorService.AssignPlotIds(
+                            _parcels,
+                            parcelAnnotationsMap,
+                            allAnnotsFlattened,
+                            parcelCenters,
+                            explicitPlotLayer,
+                            secondaryPlotLayers,
+                            targetUsageLayers,
+                            maxProximityMeters: 20.0);
+
+                        System.Diagnostics.Debug.WriteLine($"[Audit Log] {matchReport.GetSummary()}");
+
+                        // Assign UsageText / Usage from annotations map
+                        foreach (var p in _parcels)
                         {
-                            var targetAnnots = datasetFeatures.Annotations
-                                .Where(a => targetPlotLayers.Contains(a.LayerName) && !string.IsNullOrWhiteSpace(a.Text) && a.Location != null)
-                                .ToList();
-
-                            if (targetAnnots.Count > 0)
+                            if (parcelAnnotationsMap.TryGetValue(p.InternalId, out var insideAnnots) && insideAnnots.Count > 0)
                             {
-                                var usedPlots = new HashSet<string>(_parcels.Where(pr => !pr.PlotId.StartsWith("P")).Select(pr => pr.PlotId));
-                                foreach (var p in remainingParcels)
+                                var usageAnnot = insideAnnots.FirstOrDefault(a =>
+                                    targetUsageLayers.Contains(a.LayerName) ||
+                                    CadExtractionService.InferRoleFromName(a.LayerName) == LayerRole.UsageText ||
+                                    PlotIdExtractorService.IsUsageText(a.Text));
+
+                                if (!string.IsNullOrWhiteSpace(usageAnnot.Text))
                                 {
-                                    if (!_parcelGeometries.TryGetValue(p.InternalId, out var polyGeom) || polyGeom == null) continue;
-                                    var center = polyGeom.Extent.Center;
-
-                                    var closest = targetAnnots
-                                        .Where(a => !usedPlots.Contains(a.Text))
-                                        .Select(a => new { Annot = a, Dist = Math.Sqrt(Math.Pow(a.Location.X - center.X, 2) + Math.Pow(a.Location.Y - center.Y, 2)) })
-                                        .Where(x => x.Dist <= 20.0) // within 20m of parcel center
-                                        .OrderBy(x => x.Dist)
-                                        .FirstOrDefault();
-
-                                    if (closest != null)
-                                    {
-                                        p.PlotId = closest.Annot.Text.Trim();
-                                        usedPlots.Add(p.PlotId);
-                                    }
+                                    p.Usage = usageAnnot.Text.Trim();
+                                    p.UsageText = usageAnnot.Text.Trim();
                                 }
                             }
                         }

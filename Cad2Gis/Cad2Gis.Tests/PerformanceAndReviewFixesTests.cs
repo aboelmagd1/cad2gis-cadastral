@@ -457,5 +457,100 @@ public class PerformanceAndReviewFixesTests
             }
         }
     }
+
+    // =========================================================================
+    // Part D: Plot ID Extraction & Layer Persistence Tests
+    // =========================================================================
+
+    [Fact]
+    public void PlotIdExtractor_CleanLayerName_HandlesAllVariants()
+    {
+        Assert.Null(PlotIdExtractorService.CleanLayerName(null));
+        Assert.Null(PlotIdExtractorService.CleanLayerName(""));
+        Assert.Null(PlotIdExtractorService.CleanLayerName("   "));
+        Assert.Null(PlotIdExtractorService.CleanLayerName("(تلقائي من دور الطبقة - PlotText)"));
+        Assert.Equal("PLOT_NUMBERS", PlotIdExtractorService.CleanLayerName("PLOT_NUMBERS (★ PlotText)"));
+        Assert.Equal("CAD_TEXT", PlotIdExtractorService.CleanLayerName("CAD_TEXT"));
+        Assert.Equal("A-B-C", PlotIdExtractorService.CleanLayerName("  A-B-C (★ PlotText)  "));
+    }
+
+    [Fact]
+    public void PlotIdExtractor_ExplicitLayer_HasAbsolutePrecedence_OverOtherInsideAnnotations()
+    {
+        var parcel = new ParcelRecord
+        {
+            InternalId = 1,
+            Class = ParcelClass.Main,
+            PlotId = "P1"
+        };
+
+        var insideAnnots = new Dictionary<long, List<(string Text, string LayerName)>>
+        {
+            [1] = new List<(string Text, string LayerName)>
+            {
+                ("12.50", "DIMENSIONS"),
+                ("سكني", "LAND_USE"),
+                ("105/A", "PARCEL_NUMBERS")
+            }
+        };
+
+        var parcelCenters = new Dictionary<long, (double CenterX, double CenterY)>
+        {
+            [1] = (100.0, 100.0)
+        };
+
+        var report = PlotIdExtractorService.AssignPlotIds(
+            new[] { parcel },
+            insideAnnots,
+            Enumerable.Empty<(string, double, double, string)>(),
+            parcelCenters,
+            explicitPlotLayer: "PARCEL_NUMBERS (★ PlotText)",
+            usageLayers: new HashSet<string> { "LAND_USE" });
+
+        Assert.Equal("105/A", parcel.PlotId);
+        Assert.Equal(1, report.MatchedFromSelectedLayer);
+        Assert.Equal(0, report.FallbackDummyIds);
+    }
+
+    [Fact]
+    public void PlotIdExtractor_ProximityMatching_PrefersExplicitLayer_WithinSearchRadius()
+    {
+        var parcel = new ParcelRecord
+        {
+            InternalId = 2,
+            Class = ParcelClass.Main,
+            PlotId = "P2"
+        };
+
+        // No annotation strictly inside the parcel
+        var insideAnnots = new Dictionary<long, List<(string Text, string LayerName)>>();
+
+        var parcelCenters = new Dictionary<long, (double CenterX, double CenterY)>
+        {
+            [2] = (50.0, 50.0)
+        };
+
+        // 2 annotations outside:
+        // A) "999" from OTHER_LAYER at distance 2m (50, 52)
+        // B) "345" from explicit PLOT_NUM layer at distance 7m (50, 57)
+        var allAnnots = new List<(string Text, double X, double Y, string LayerName)>
+        {
+            ("999", 50.0, 52.0, "OTHER_LAYER"),
+            ("345", 50.0, 57.0, "PLOT_NUM")
+        };
+
+        var report = PlotIdExtractorService.AssignPlotIds(
+            new[] { parcel },
+            insideAnnots,
+            allAnnots,
+            parcelCenters,
+            explicitPlotLayer: "PLOT_NUM",
+            secondaryPlotLayers: new HashSet<string> { "OTHER_LAYER" },
+            maxProximityMeters: 20.0);
+
+        // Proximity must pick "345" from explicit PLOT_NUM layer, NOT "999" from OTHER_LAYER
+        Assert.Equal("345", parcel.PlotId);
+        Assert.Equal(1, report.MatchedViaProximity);
+    }
 }
 
