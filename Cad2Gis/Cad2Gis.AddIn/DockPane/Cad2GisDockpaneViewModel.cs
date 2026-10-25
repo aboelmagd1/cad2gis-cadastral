@@ -1729,11 +1729,25 @@ public partial class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contrac
         set => SetProperty(ref _passageThresholdMeters, value);
     }
 
-    private int _rayCount = 3;
+    private int _rayCount = 1;
     public int RayCount
     {
         get => _rayCount;
         set => SetProperty(ref _rayCount, value);
+    }
+
+    private double _minSharedSegmentLength = 0.5;
+    public double MinSharedSegmentLength
+    {
+        get => _minSharedSegmentLength;
+        set => SetProperty(ref _minSharedSegmentLength, value);
+    }
+
+    private MainUsageMode _mainUsageMode = MainUsageMode.InferFromText;
+    public MainUsageMode MainUsageMode
+    {
+        get => _mainUsageMode;
+        set => SetProperty(ref _mainUsageMode, value);
     }
 
     private bool _mergeChamfers = true;
@@ -1757,7 +1771,7 @@ public partial class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contrac
         set => SetProperty(ref _aMaxDeg, value);
     }
 
-    private double _multiSegmentAngleDeviationDeg = 10.0;
+    private double _multiSegmentAngleDeviationDeg = 15.0;
     public double MultiSegmentAngleDeviationDeg
     {
         get => _multiSegmentAngleDeviationDeg;
@@ -2322,6 +2336,7 @@ public partial class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contrac
             _profileModel = p;
             PassageThresholdMeters = p.PassageStreetThresholdMeters;
             RayCount = p.RayCount;
+            MinSharedSegmentLength = p.MinSharedSegmentLength > 0 ? p.MinSharedSegmentLength : 0.5;
             MergeChamfers = p.MergeChamfers;
             AMinDeg = p.AMinDeg;
             AMaxDeg = p.AMaxDeg;

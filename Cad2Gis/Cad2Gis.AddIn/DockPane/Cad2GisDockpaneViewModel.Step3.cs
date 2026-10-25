@@ -149,13 +149,14 @@ public partial class Cad2GisDockpaneViewModel
                 else
                 {
                     // 1. Read Land Use Table & join by PLOT_ID
+                    Dictionary<string, LandUseItem>? luMap = null;
                     if (File.Exists(LandUseExcelPath))
                     {
-                        ReportProgress(35, "Step 3: Join Land-Use Table", $"Reading and joining land uses from '{Path.GetFileName(LandUseExcelPath)}'...", phase: "Phase 3 of 5");
-                        var luMap = LandUseExcelService.ReadLandUseFile(LandUseExcelPath);
-                        var discrepancies = new List<string>();
-                        LandUseExcelService.EnrichParcels(_parcels, luMap, discrepancies);
+                        ReportProgress(35, "الخطوة 3: مطابقة جدول استخدامات الأراضي", $"قراءة ومطابقة الاستخدامات من '{Path.GetFileName(LandUseExcelPath)}'...", phase: "المرحلة 3 من 5");
+                        luMap = LandUseExcelService.ReadLandUseFile(LandUseExcelPath);
                     }
+                    var discrepancies = new List<string>();
+                    LandUseExcelService.EnrichParcels(_parcels, luMap, discrepancies, MainUsageMode);
 
                     // 2. Validate Areas Excel if provided
                     if (File.Exists(AreasExcelPath))

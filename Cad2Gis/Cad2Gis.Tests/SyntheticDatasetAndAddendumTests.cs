@@ -336,7 +336,7 @@ EOF";
         Assert.Equal("MOMRAH", profile.DirectionSystem);
         Assert.Equal(10.0, profile.PassageStreetThresholdMeters);
         Assert.Equal(100.0, profile.MaxRaySearchDistanceMeters);
-        Assert.Equal(3, profile.RayCount);
+        Assert.Equal(1, profile.RayCount);
         Assert.Equal(32637, profile.UtmEpsg);
         Assert.True(profile.MergeChamfers);
     }

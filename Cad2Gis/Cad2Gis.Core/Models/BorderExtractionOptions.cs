@@ -20,11 +20,11 @@ public class BorderExtractionOptions
     /// <summary>
     /// Angular deviation tolerance (degrees) from 180° between consecutive segments in a merged border
     /// to define whether the border is "Multi" or "Single".
-    /// If the angle between segments deviates from 180° by more than this tolerance (i.e. angle < 170° or > 190°),
+    /// If the angle between segments deviates from 180° by more than this tolerance (i.e. angle < 160° or > 200°),
     /// the border is considered "Multi"; otherwise "Single".
-    /// Default: 10.0°.
+    /// Default: 15.0°.
     /// </summary>
-    public double MultiSegmentAngleDeviationDeg { get; set; } = 10.0;
+    public double MultiSegmentAngleDeviationDeg { get; set; } = 15.0;
 
     /// <summary>
     /// If true, reflex (concave) corners with interior angles in [360 - AMaxDeg, 360 - AMinDeg]

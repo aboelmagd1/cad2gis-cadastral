@@ -66,8 +66,10 @@ public class WidthInferenceOptions
 {
     public double MaxSearchDistance { get; set; } = 100.0;
     public double PassageStreetThreshold { get; set; } = 10.0;
-    public int RayCount { get; set; } = 3; // 3 rays (1/4, 1/2, 3/4) or 1 (1/2)
-    public List<double> StandardWidths { get; set; } = new() { 6.0, 8.0, 10.0, 12.0, 15.0, 20.0, 25.0, 30.0 };
+    public int RayCount { get; set; } = 1; // Default: Single ray from midpoint (1/2)
+    public double MinFacingGap { get; set; } = 1.0; // Section 5.1: Minimum gap 1.0m to be a valid facing parcel across street
+    public double StandardWidthTolerance { get; set; } = 1.0; // Section 5.2: ±1.0m
+    public List<double> StandardWidths { get; set; } = new() { 4.0, 5.0, 6.0, 8.0, 10.0, 12.0, 15.0, 18.0, 20.0, 25.0, 30.0, 36.0, 40.0, 50.0, 60.0 };
     public string PassageBorderType { get; set; } = "LNE"; // Walkway code
     public string StreetBorderType { get; set; } = "STR";
 }
@@ -103,8 +105,12 @@ public static class WidthInferenceService
             {
                 // Add the start offset back so width is measured from the actual parcel boundary (P5.3)
                 double boundaryDist = hit.Distance + rayOffsetMeters;
-                validHits.Add(hit);
-                allRayDistances.Add(boundaryDist);
+                // Section 5.1: Facing obstacle must be >= MIN_FACING_GAP (1.0m) away
+                if (boundaryDist >= (options.MinFacingGap - 1e-4))
+                {
+                    validHits.Add(hit);
+                    allRayDistances.Add(boundaryDist);
+                }
             }
             else
             {
@@ -115,8 +121,11 @@ public static class WidthInferenceService
                 if (retryHit.Hit)
                 {
                     double boundaryDist = retryHit.Distance + rayOffsetMeters;
-                    validHits.Add(retryHit);
-                    allRayDistances.Add(boundaryDist);
+                    if (boundaryDist >= (options.MinFacingGap - 1e-4))
+                    {
+                        validHits.Add(retryHit);
+                        allRayDistances.Add(boundaryDist);
+                    }
                 }
             }
         }
@@ -137,16 +146,20 @@ public static class WidthInferenceService
                 medianDist = (sorted[(sorted.Count / 2) - 1] + sorted[sorted.Count / 2]) / 2.0;
             }
 
-            // P5.2: Use MidpointRounding.AwayFromZero instead of Banker's rounding
+            // Section 5.2: Three values preserved:
+            // 1. Measured: Raw geometric distance
+            // 2. Rounded: Nearest integer (AwayFromZero)
+            // 3. Suggested: Nearest standard width within ±1m tolerance (or null if outside)
             double roundedWidth = Math.Round(medianDist, MidpointRounding.AwayFromZero);
 
             border.IsInferred = true;
             border.IsUnknown = false;
-            border.MeasuredWidth = roundedWidth;
             border.RayLength = Math.Round(medianDist, 2, MidpointRounding.AwayFromZero);
-            border.SuggestedWidth = FindNearestStandardWidth(roundedWidth, options.StandardWidths);
+            border.MeasuredWidth = roundedWidth;
+            border.SuggestedWidth = FindNearestStandardWidth(roundedWidth, options.StandardWidths, options.StandardWidthTolerance);
             border.HitElementId = validHits[0].HitElementId ?? "FacingEdge";
 
+            // NO automatic snapping: DESCRIPTO receives the rounded width
             if (roundedWidth < options.PassageStreetThreshold)
             {
                 border.Descriptio = $"ممر بعرض {roundedWidth} م";
@@ -252,6 +265,15 @@ public static class WidthInferenceService
         }
 
         return false;
+    }
+
+    public static double? FindNearestStandardWidth(double measuredWidth, IReadOnlyList<double> standardWidths, double tolerance)
+    {
+        if (standardWidths == null || standardWidths.Count == 0) return null;
+        double nearest = standardWidths.OrderBy(w => Math.Abs(w - measuredWidth)).First();
+        if (Math.Abs(nearest - measuredWidth) <= (tolerance + 1e-4))
+            return nearest;
+        return null;
     }
 
     public static double FindNearestStandardWidth(double measuredWidth, IReadOnlyList<double> standardWidths)

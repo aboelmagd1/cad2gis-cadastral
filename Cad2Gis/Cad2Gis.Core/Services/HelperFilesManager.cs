@@ -17,7 +17,8 @@ public class ToolSettings
     public double DefaultClosureToleranceMeters { get; set; } = 0.05;
     public double DefaultPassageStreetThresholdMeters { get; set; } = 10.0;
     public double DefaultMaxRayDistanceMeters { get; set; } = 100.0;
-    public int DefaultRayCount { get; set; } = 3;
+    public int DefaultRayCount { get; set; } = 1;
+    public double DefaultMinSharedSegmentLength { get; set; } = 0.5;
     public double AreaToleranceSqm { get; set; } = 0.5;
     public double AreaTolerancePercent { get; set; } = 0.1;
     public double ChamferThresholdMeters { get; set; } = 7.0;
@@ -30,7 +31,7 @@ public class ToolSettings
     // Part A: Border Extraction Settings
     public double AMinDeg { get; set; } = 10.0;
     public double AMaxDeg { get; set; } = 160.0;
-    public double MultiSegmentAngleDeviationDeg { get; set; } = 10.0;
+    public double MultiSegmentAngleDeviationDeg { get; set; } = 15.0;
     public bool IncludeReflexCorners { get; set; } = true;
     public double ArcCenterToleranceMeters { get; set; } = 0.05;
     public double ArcRadiusToleranceMeters { get; set; } = 0.05;

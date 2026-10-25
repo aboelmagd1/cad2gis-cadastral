@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ArcGIS.Core.Geometry;
+using Cad2Gis.Core.Lookups;
 using Cad2Gis.Core.Models;
 using Cad2Gis.Core.Services;
 
@@ -12,6 +13,8 @@ public class NeighborTouchInfo
     public string BorderType { get; set; } = "STR";
     public string DescriptionPart { get; set; } = "شارع";
     public double ContactLength { get; set; }
+    public bool IsMain { get; set; }
+    public string NeighborPlotId { get; set; } = string.Empty;
 }
 
 public static class OutwardRaySensor
@@ -22,9 +25,11 @@ public static class OutwardRaySensor
         IReadOnlyList<(ParcelRecord Parcel, Polygon Geometry)> allParcels,
         IReadOnlyList<Polyline>? roadLines = null,
         WidthInferenceOptions? inferenceOptions = null,
-        double touchBufferDistance = 0.5)
+        double minSharedSegmentLength = 0.5,
+        Action<string>? qaLog = null)
     {
         var options = inferenceOptions ?? new WidthInferenceOptions();
+        var currentGeom = allParcels.FirstOrDefault(p => p.Parcel.InternalId == currentParcel.InternalId).Geometry;
 
         // Build obstacle segments for width inference
         var obstacleSegments = new List<Segment2D>();
@@ -32,6 +37,20 @@ public static class OutwardRaySensor
         {
             if (other.Parcel.InternalId == currentParcel.InternalId) continue;
             if (other.Geometry == null || other.Geometry.IsEmpty) continue;
+
+            // Section 5.1 Rule 2: Facing obstacle must not be touching current parcel and must not be closer than MIN_FACING_GAP (1.0m)
+            if (currentGeom != null && !currentGeom.IsEmpty)
+            {
+                try
+                {
+                    double dist = GeometryEngine.Instance.Distance(currentGeom, other.Geometry);
+                    if (dist < (options.MinFacingGap - 1e-4))
+                    {
+                        continue; // Touching or closer than 1m -> neighbor, not facing parcel across street!
+                    }
+                }
+                catch { }
+            }
 
             var pts = other.Geometry.Points;
             for (int i = 0; i < pts.Count - 1; i++)
@@ -70,7 +89,7 @@ public static class OutwardRaySensor
 
             var detectedNeighbors = new List<NeighborTouchInfo>();
 
-            // 1. Check adjoining touch neighbors
+            // 1. Check adjoining touch neighbors with eligible shared segment length >= 0.5m
             SpatialReference? activeSr = borderGeom.SpatialReference;
             if (activeSr == null)
             {
@@ -82,103 +101,171 @@ public static class OutwardRaySensor
                 }
             }
 
-            Polygon? searchArea = null;
-            try
+            // Check linear units of coordinate system
+            double effectiveMinSharedLength = minSharedSegmentLength;
+            double snapTolerance = 0.05;
+            if (activeSr?.Unit != null && activeSr.Unit.ConversionFactor > 0)
             {
-                searchArea = GeometryEngine.Instance.Buffer(borderGeom, touchBufferDistance) as Polygon;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[OutwardRaySensor] Buffer failed on border {cardinal}: {ex.Message}");
+                effectiveMinSharedLength = minSharedSegmentLength / activeSr.Unit.ConversionFactor;
+                snapTolerance = 0.05 / activeSr.Unit.ConversionFactor;
             }
 
-            if (searchArea != null && !searchArea.IsEmpty)
+            foreach (var other in allParcels)
             {
-                var targetSr = searchArea.SpatialReference ?? activeSr;
+                if (other.Parcel.InternalId == currentParcel.InternalId) continue;
+                if (!string.IsNullOrEmpty(other.Parcel.PlotId) &&
+                    string.Equals(other.Parcel.PlotId, currentParcel.PlotId, StringComparison.OrdinalIgnoreCase)) continue;
 
-                foreach (var other in allParcels)
+                var otherGeom = other.Geometry;
+                if (otherGeom == null || otherGeom.IsEmpty) continue;
+
+                try
                 {
-                    if (other.Parcel.InternalId == currentParcel.InternalId) continue;
-                    if (!string.IsNullOrEmpty(other.Parcel.PlotId) &&
-                        string.Equals(other.Parcel.PlotId, currentParcel.PlotId, StringComparison.OrdinalIgnoreCase)) continue;
-
-                    var otherGeom = other.Geometry;
-                    if (otherGeom == null || otherGeom.IsEmpty) continue;
-
-                    try
+                    // Defensively align spatial references to guarantee GeometryEngine compatibility
+                    if (activeSr != null && (otherGeom.SpatialReference == null || !activeSr.IsEqual(otherGeom.SpatialReference)))
                     {
-                        // Defensively align spatial references to guarantee GeometryEngine compatibility
-                        if (targetSr != null && (otherGeom.SpatialReference == null || !targetSr.IsEqual(otherGeom.SpatialReference)))
+                        var b = new PolygonBuilderEx(otherGeom) { SpatialReference = activeSr };
+                        otherGeom = (Polygon)b.ToGeometry();
+                    }
+
+                    // Buffer neighbor polygon by snap tolerance (0.05m) to catch coincident CAD boundaries
+                    var neighborBuffered = GeometryEngine.Instance.Buffer(otherGeom, snapTolerance) as Polygon;
+                    if (neighborBuffered == null || neighborBuffered.IsEmpty) continue;
+
+                    if (GeometryEngine.Instance.Intersects(borderGeom, neighborBuffered))
+                    {
+                        var sharedGeom = GeometryEngine.Instance.Intersection(borderGeom, neighborBuffered);
+                        double sharedLength = 0.0;
+                        if (sharedGeom != null && !sharedGeom.IsEmpty)
                         {
-                            var b = new PolygonBuilderEx(otherGeom) { SpatialReference = targetSr };
-                            otherGeom = (Polygon)b.ToGeometry();
-                        }
-                        else if (targetSr == null && otherGeom.SpatialReference != null)
-                        {
-                            var b = new PolygonBuilderEx(searchArea) { SpatialReference = otherGeom.SpatialReference };
-                            searchArea = (Polygon)b.ToGeometry();
-                            targetSr = otherGeom.SpatialReference;
+                            sharedLength = GeometryEngine.Instance.Length(sharedGeom);
                         }
 
-                        if (GeometryEngine.Instance.Intersects(searchArea, otherGeom))
+                        // Shared Segment Rule (Section 2.2):
+                        // Only eligible if sharedLength >= 0.5 meters (effectiveMinSharedLength)
+                        if (sharedLength >= (effectiveMinSharedLength - 1e-4))
                         {
-                            var intersection = GeometryEngine.Instance.Intersection(searchArea, otherGeom);
-                            double contactLen = GeometryEngine.Instance.Length(intersection);
+                            bool isMainNeighbor = other.Parcel.Class == ParcelClass.Main || other.Parcel.ParcelTyp == 1;
+                            string bType;
+                            string descPart;
 
-                            if (contactLen > 0.1 || !intersection.IsEmpty)
+                            if (isMainNeighbor)
                             {
-                                if (other.Parcel.Class == ParcelClass.Main)
-                                {
-                                    detectedNeighbors.Add(new NeighborTouchInfo
-                                    {
-                                        BorderType = "PLT",
-                                        DescriptionPart = $"قطعة رقم {other.Parcel.PlotId}",
-                                        ContactLength = contactLen
-                                    });
-                                }
-                                else
-                                {
-                                    // Sub-parcel neighbor (Garden, Corridor, Service, Utility)
-                                    string subDesc = !string.IsNullOrWhiteSpace(other.Parcel.Remarks) 
-                                        ? other.Parcel.Remarks 
-                                        : (!string.IsNullOrWhiteSpace(other.Parcel.SubType) ? other.Parcel.SubType : "مرفق");
-                                    string bType = other.Parcel.Usage switch
-                                    {
-                                        "PAK" => "PAK",
-                                        "SRV" => "SRV",
-                                        "UTL" => "UTL",
-                                        _ => "SRV"
-                                    };
-
-                                    detectedNeighbors.Add(new NeighborTouchInfo
-                                    {
-                                        BorderType = bType,
-                                        DescriptionPart = subDesc,
-                                        ContactLength = contactLen
-                                    });
-                                }
+                                // Section 3.2: MAIN neighbor -> PLT directly (no text matching)
+                                bType = "PLT";
+                                descPart = $"قطعة رقم {other.Parcel.PlotId}";
                             }
+                            else
+                            {
+                                // Section 3.2: SUB neighbor -> check REMARKS then USAGE via Keywords table
+                                string? matchedCode = null;
+                                if (!string.IsNullOrWhiteSpace(other.Parcel.Remarks))
+                                {
+                                    var m = MunicipalLookups.MatchBorderTypeFromKeywords(other.Parcel.Remarks, "REMARKS");
+                                    if (!string.IsNullOrEmpty(m.Code) && MunicipalLookups.IsOfficialBorderType(m.Code))
+                                        matchedCode = m.Code;
+                                }
+                                if (string.IsNullOrEmpty(matchedCode) && !string.IsNullOrWhiteSpace(other.Parcel.Usage))
+                                {
+                                    var m = MunicipalLookups.MatchBorderTypeFromKeywords(other.Parcel.Usage, "USAGE");
+                                    if (!string.IsNullOrEmpty(m.Code) && MunicipalLookups.IsOfficialBorderType(m.Code))
+                                        matchedCode = m.Code;
+                                }
+                                if (string.IsNullOrEmpty(matchedCode) && string.Equals(other.Parcel.Usage, "UTL", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    matchedCode = "UTL";
+                                }
+
+                                if (string.IsNullOrEmpty(matchedCode))
+                                {
+                                    qaLog?.Invoke($"Plot {currentParcel.PlotId} border {cardinal}: Shared segment of {sharedLength:F2}m with SUB neighbor (Plot {other.Parcel.PlotId}) has no approved BORDERTYPE match for text '{other.Parcel.Remarks}'. Left blank.");
+                                }
+
+                                bType = matchedCode ?? string.Empty;
+                                descPart = !string.IsNullOrWhiteSpace(other.Parcel.Remarks)
+                                    ? other.Parcel.Remarks
+                                    : (!string.IsNullOrWhiteSpace(other.Parcel.SubType) ? other.Parcel.SubType : other.Parcel.PlotId);
+                            }
+
+                            detectedNeighbors.Add(new NeighborTouchInfo
+                            {
+                                BorderType = bType,
+                                DescriptionPart = descPart,
+                                ContactLength = sharedLength,
+                                IsMain = isMainNeighbor,
+                                NeighborPlotId = other.Parcel.PlotId
+                            });
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[OutwardRaySensor] Intersect check skipped for neighbor {other.Parcel.PlotId}: {ex.Message}");
-                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[OutwardRaySensor] Intersect check skipped for neighbor {other.Parcel.PlotId}: {ex.Message}");
                 }
             }
 
             if (detectedNeighbors.Count > 0)
             {
-                // Neighbor parcel or sub-parcel found
-                var parts = detectedNeighbors.Select(n => n.DescriptionPart).Distinct().ToList();
-                borderRec.BorderType = detectedNeighbors[0].BorderType;
-                borderRec.Descriptio = string.Join("، ", parts);
-                borderRec.IsInferred = false;
+                // Section 2.4: Multiple neighbors on the same border
+                // Border remains a single line. BORDERTYPE is chosen from the neighbor with longest shared segment.
+                var sortedNeighbors = detectedNeighbors
+                    .OrderByDescending(n => n.ContactLength)
+                    .ThenBy(n => n.NeighborPlotId, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
 
-                if (parts.Count > 1)
+                borderRec.BorderType = sortedNeighbors[0].BorderType;
+                if (sortedNeighbors.Count > 1)
                 {
-                    borderRec.Dimension = "Multi";
+                    var altTypes = sortedNeighbors.Skip(1).Where(n => !string.IsNullOrEmpty(n.BorderType) && n.BorderType != borderRec.BorderType).Select(n => $"{n.NeighborPlotId}: {n.BorderType}").ToList();
+                    if (altTypes.Count > 0)
+                    {
+                        qaLog?.Invoke($"Plot {currentParcel.PlotId} border {cardinal} touches multiple neighbors: BORDERTYPE assigned '{borderRec.BorderType}' from longest shared segment ({sortedNeighbors[0].ContactLength:F2}m). Other types: {string.Join(", ", altTypes)}.");
+                    }
                 }
+
+                // Section 4: Narrative DESCRIPTO formatting
+                // Group MAIN parcels: "قطعة رقم 12 و13", followed by SUB parcel descriptions separated by " و "
+                var mainPlotIds = detectedNeighbors
+                    .Where(n => n.IsMain && !string.IsNullOrWhiteSpace(n.NeighborPlotId))
+                    .OrderBy(n => n.NeighborPlotId, StringComparer.OrdinalIgnoreCase)
+                    .Select(n => n.NeighborPlotId)
+                    .Distinct()
+                    .ToList();
+
+                string? mainGroupDesc = null;
+                if (mainPlotIds.Count == 1)
+                {
+                    mainGroupDesc = $"قطعة رقم {mainPlotIds[0]}";
+                }
+                else if (mainPlotIds.Count > 1)
+                {
+                    mainGroupDesc = $"قطعة رقم {string.Join(" و", mainPlotIds)}";
+                }
+
+                var subParts = detectedNeighbors
+                    .Where(n => !n.IsMain)
+                    .Select(n => n.DescriptionPart)
+                    .Where(d => !string.IsNullOrWhiteSpace(d))
+                    .Distinct()
+                    .ToList();
+
+                if (mainGroupDesc != null && subParts.Count > 0)
+                {
+                    borderRec.Descriptio = $"{mainGroupDesc} و {string.Join(" و ", subParts)}";
+                }
+                else if (mainGroupDesc != null)
+                {
+                    borderRec.Descriptio = mainGroupDesc;
+                }
+                else
+                {
+                    borderRec.Descriptio = string.Join(" و ", subParts);
+                }
+
+                borderRec.IsInferred = false;
+                borderRec.IsUnknown = false;
+
+                // NOTE: borderRec.Dimension is NOT modified here; it is determined strictly by segment angles (Section 6)
             }
             else
             {

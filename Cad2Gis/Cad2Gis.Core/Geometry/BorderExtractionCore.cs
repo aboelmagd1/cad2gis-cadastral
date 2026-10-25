@@ -150,34 +150,15 @@ public class CoreBoundaryPiece
     }
 
     /// <summary>
-    /// After merge borders, defines whether this border is "Multi" or "Single".
-    /// If the angle between any consecutive segments deviates from 180° by more than toleranceDeg (default 10°),
-    /// i.e. angle < (180 - toleranceDeg) or angle > (180 + toleranceDeg), consider this border "Multi"; otherwise "Single".
+    /// Defines whether this border is "Multi" or "Single":
+    /// - If the border consists of only 1 Segment, it is "Single".
+    /// - If the border consists of more than 1 Segment, check the smaller angle between adjacent segments.
+    ///   If the smaller angle deviation between any adjacent segments > toleranceDeg (default 15°), it is "Multi".
+    ///   Otherwise, if all angles between adjacent segments <= 15°, it is "Single".
     /// </summary>
-    public string DetermineDimension(double toleranceDeg = 10.0)
+    public string DetermineDimension(double toleranceDeg = 15.0)
     {
-        if (Segments == null || Segments.Count == 0)
-            return "Single";
-
-        // Check if any circular arc segment has a sweep/curvature turn > toleranceDeg
-        foreach (var seg in Segments)
-        {
-            if (seg.Type == CurveType.CircularArc)
-            {
-                if (seg.StartTangentDeg.HasValue && seg.EndTangentDeg.HasValue)
-                {
-                    double sweep = BorderExtractionCore.AngularDifferenceDeg(seg.StartTangentDeg.Value, seg.EndTangentDeg.Value);
-                    if (sweep > toleranceDeg)
-                        return "Multi";
-                }
-                else
-                {
-                    return "Multi";
-                }
-            }
-        }
-
-        if (Segments.Count <= 1)
+        if (Segments == null || Segments.Count <= 1)
             return "Single";
 
         // Check angle between consecutive segments

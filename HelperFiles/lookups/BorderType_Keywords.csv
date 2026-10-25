@@ -1,0 +1,79 @@
+Keyword,AppliesTo,MatchType,BorderTypeCode,Priority,Notes
+ممر مشاة,BOTH,contains,LNE,1,ممر مشاة
+ممر مشاه,BOTH,contains,LNE,1,ممر مشاه
+حديقة,BOTH,contains,PAK,1,حديقة
+حديقه,BOTH,contains,PAK,1,حديقة عامة
+مسجد,BOTH,contains,MSQ,1,مسجد
+جامع,BOTH,contains,MSQ,1,جامع
+مصلى,BOTH,contains,MSQ,1,مصلى
+ممر,BOTH,contains,HLW,2,ممر
+خدمات,BOTH,contains,SRV,2,خدمات
+مرفق,BOTH,contains,UTL,2,مرفق
+مرافق,BOTH,contains,UTL,2,مرافق
+شارع,BOTH,contains,STR,2,شارع
+طريق,BOTH,contains,ROD,2,طريق
+مواقف,BOTH,contains,PRK,2,مواقف سيارات
+موقف,BOTH,contains,PRK,2,موقف سيارات
+نافذ,BOTH,contains,PNT,2,نافذ
+محطة توليد,BOTH,contains,PST,2,محطة توليد
+غرفة كهرباء,BOTH,contains,ECR,2,غرفة كهرباء
+غرفة محولات,BOTH,contains,TFR,2,غرفة المحولات
+ساحة,BOTH,contains,YRD,2,ساحة
+أرض فضاء,BOTH,contains,LAN,2,أرض فضاء
+مبنى,BOTH,contains,BUL,2,مبنى
+عمارة,BOTH,contains,BLD,2,عمارة
+محل,BOTH,contains,COM,2,محل تجاري
+مستودع,BOTH,contains,WRH,2,مستودع
+غرفة مضخات,BOTH,contains,PMR,2,غرفة مضخات
+غرفة خزان,BOTH,contains,TNK,2,غرفة خزان
+غرفة نفايات,BOTH,contains,WST,2,غرفة نفايات
+حضانة,BOTH,contains,NRS,2,حضانة
+ملعب,BOTH,contains,SDM,2,ملعب
+مسبح,BOTH,contains,SWM,2,مسبح
+نادي رياضي,BOTH,contains,GYM,2,نادي رياضي
+مكتبة,BOTH,contains,LBR,2,مكتبة
+مكتب,BOTH,contains,OFC,2,مكتب
+حوش,BOTH,contains,BRD,2,حوش
+ملحق,BOTH,contains,ANN,2,ملحق
+رصيف,BOTH,contains,CRB,2,رصيف
+صالة,BOTH,contains,LNG,2,صالة
+بهو,BOTH,contains,HAL,2,بهو
+مدخل,BOTH,contains,ENT,2,مدخل
+درج,BOTH,contains,STW,2,الدرج
+سلم,BOTH,contains,LDR,2,سلم
+ارتداد,BOTH,contains,SBK,2,ارتداد
+منور,BOTH,contains,DCT,2,منور
+دكت,BOTH,contains,TUB,2,دكت
+سطح,BOTH,contains,ROF,2,السطح
+مصعد,BOTH,contains,ELV,2,مصعد
+مصاعد,BOTH,contains,EVS,2,مصاعد
+شقة,BOTH,contains,PRT,2,شقة
+شقق,BOTH,contains,PRS,2,شقق
+بيت,BOTH,contains,HOM,2,بيت
+عقار,BOTH,contains,REL,2,عقار
+وحدة,BOTH,contains,UNT,2,الوحدة
+أرض جبلية,BOTH,contains,LDM,2,أرض جبلية
+غرفة مفرغة,BOTH,contains,VCR,2,غرفة مفرغة
+غرفة صيانة,BOTH,contains,MTR,2,غرفة صيانة
+غرفة ميكانيكا,BOTH,contains,MNR,2,غرفة ميكانيكا
+غرفة مولدات,BOTH,contains,GRR,2,غرفة مولدات
+غرفة اتصالات,BOTH,contains,CMR,2,غرفة اتصالات
+غرفة لوحات كهرباء,BOTH,contains,PNR,2,غرفة لوحات كهرباء
+غرفة ترفيه,BOTH,contains,REC,2,غرفة ترفيه
+غرفة متعددة الاستخدامات,BOTH,contains,MRP,2,غرفة متعددة الاستخدامات
+غرفة إدارة الأنظمة,BOTH,contains,SMR,2,غرفة إدارة الأنظمة
+غرفة,BOTH,contains,ROM,3,غرفة
+فراغ,BOTH,contains,GAP,3,فراغ
+موزع,BOTH,contains,DSB,3,موزع
+جزء خاص,BOTH,contains,PRV,3,جزء خاص
+لا ينطبق,BOTH,exact,NA,3,لا ينطبق
+القطعة,BOTH,exact,PLT,3,القطعة
+قطعة,BOTH,contains,PLT,3,القطعة
+جار,BOTH,contains,NGB,3,جار
+سكني,USAGE,exact,RSD,1,سكني
+تجاري,USAGE,exact,COM,1,تجاري
+سكني تجاري,USAGE,exact,RSC,1,سكني تجاري
+تجاري سكني,USAGE,exact,RSC,1,تجاري سكني
+زراعي,USAGE,exact,AGR,1,زراعي
+صناعي,USAGE,exact,IND,1,صناعي
+مرافق,USAGE,exact,UTL,1,مرافق

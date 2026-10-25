@@ -17,7 +17,8 @@ public class ConsultantProfileModel
     public string DirectionSystem { get; set; } = "MOMRAH"; // MOMRAH (1=N, 2=E, 3=S, 4=W) or ADDENDUM (1=N, 2=S, 3=E, 4=W)
     public double PassageStreetThresholdMeters { get; set; } = 10.0;
     public double MaxRaySearchDistanceMeters { get; set; } = 100.0;
-    public int RayCount { get; set; } = 3;
+    public int RayCount { get; set; } = 1;
+    public double MinSharedSegmentLength { get; set; } = 0.5;
     public string RayMethod { get; set; } = "Median";
     public double SnapToleranceMeters { get; set; } = 0.05;
     public bool MergeChamfers { get; set; } = true;
@@ -38,7 +39,7 @@ public class ConsultantProfileModel
     // Part A: Border Extraction Settings
     public double AMinDeg { get; set; } = 10.0;
     public double AMaxDeg { get; set; } = 160.0;
-    public double MultiSegmentAngleDeviationDeg { get; set; } = 10.0;
+    public double MultiSegmentAngleDeviationDeg { get; set; } = 15.0;
     public bool IncludeReflexCorners { get; set; } = true;
     public double ArcCenterToleranceMeters { get; set; } = 0.05;
     public double ArcRadiusToleranceMeters { get; set; } = 0.05;

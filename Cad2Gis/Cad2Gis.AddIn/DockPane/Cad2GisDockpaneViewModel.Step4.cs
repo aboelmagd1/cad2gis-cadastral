@@ -125,6 +125,17 @@ public partial class Cad2GisDockpaneViewModel
                 int mainIdx = 0;
                 var borderOptions = GetBorderExtractionOptions();
 
+                // Ensure latest official border types and usage types from Required Fields in the Shapefile.xlsx
+                if (File.Exists(_helperManager.RequiredFieldsExcel))
+                {
+                    MunicipalLookups.LoadFromRequiredFieldsExcel(_helperManager.RequiredFieldsExcel);
+                    MunicipalLookups.LoadUsageTypesFromRequiredFieldsExcel(_helperManager.RequiredFieldsExcel);
+                }
+
+                // Ensure keywords table is loaded
+                string keywordsCsv = Path.Combine(_helperManager.LookupsDir, "BorderType_Keywords.csv");
+                MunicipalLookups.LoadBorderTypeKeywords(keywordsCsv, msg => System.Diagnostics.Debug.WriteLine($"[Keywords QA] {msg}"));
+
                 foreach (var p in mainParcelsList)
                 {
                     mainIdx++;
@@ -141,8 +152,14 @@ public partial class Cad2GisDockpaneViewModel
                         borderOptions,
                         SelectedUtmZone);
 
-                    // Sense neighbors or infer undrawn road width
-                    OutwardRaySensor.SenseAndEnrichBorders(p, cardinalDict, parcelTuples, inferenceOptions: infOptions);
+                    // Sense neighbors (shared segment >= 0.5m) or infer undrawn road width via single ray
+                    OutwardRaySensor.SenseAndEnrichBorders(
+                        p, 
+                        cardinalDict, 
+                        parcelTuples, 
+                        inferenceOptions: infOptions, 
+                        minSharedSegmentLength: MinSharedSegmentLength,
+                        qaLog: msg => System.Diagnostics.Debug.WriteLine($"[Step 4 QA] {msg}"));
 
                     p.Borders.Clear();
                     foreach (var item in cardinalDict.Values)

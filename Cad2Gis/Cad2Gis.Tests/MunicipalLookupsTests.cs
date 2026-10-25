@@ -45,3 +45,4 @@ public class MunicipalLookupsTests
         Assert.Equal("2", MunicipalLookups.Cities["2"].RegionId);
     }
 }
+

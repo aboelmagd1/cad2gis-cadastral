@@ -109,6 +109,11 @@ public static class QaValidationEngine
 
             if (string.IsNullOrWhiteSpace(p.Address))
                 result.AddWarning("Parcel", string.IsNullOrEmpty(p.PlotId) ? p.InternalId.ToString() : p.PlotId, "ADDRESS", "Address is empty.");
+
+            if (!string.IsNullOrWhiteSpace(p.Usage) && !Lookups.MunicipalLookups.IsOfficialUsageType(p.Usage))
+                result.AddWarning("Parcel", string.IsNullOrEmpty(p.PlotId) ? p.InternalId.ToString() : p.PlotId, "USAGE", $"Parcel USAGE '{p.Usage}' is not in the approved 'Usage Types' list (RSD, COM, RSC, AGR, IND, UTL).");
+            else if (isMain && string.IsNullOrWhiteSpace(p.Usage))
+                result.AddWarning("Parcel", p.PlotId, "USAGE", "MAIN parcel USAGE is empty (pending owner decision or unclassified text).");
         }
 
         // 2. Validate Borders: ONLY MAIN parcels get dimensions (sub-parcels never get dimensions)
@@ -193,6 +198,11 @@ public static class QaValidationEngine
             if (b.IsUnknown || string.IsNullOrWhiteSpace(b.Descriptio) || b.Descriptio == "UNKNOWN")
             {
                 result.AddWarning("Border", b.PlotId, "DESCRIPTIO", "Arabic DESCRIPTIO is UNKNOWN or empty (unresolved neighbor/street width).");
+            }
+
+            if (!string.IsNullOrWhiteSpace(b.BorderType) && !Lookups.MunicipalLookups.IsOfficialBorderType(b.BorderType) && !Lookups.MunicipalLookups.IsUserMappedBorderType(b.BorderType))
+            {
+                result.AddWarning("Border", b.PlotId, "BORDERTYPE", $"Border type '{b.BorderType}' is not in the official 'Border Types' list.");
             }
         }
 
