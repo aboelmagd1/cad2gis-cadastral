@@ -136,13 +136,34 @@ public partial class Cad2GisDockpaneViewModel
                 string keywordsCsv = Path.Combine(_helperManager.LookupsDir, "BorderType_Keywords.csv");
                 MunicipalLookups.LoadBorderTypeKeywords(keywordsCsv, msg => System.Diagnostics.Debug.WriteLine($"[Keywords QA] {msg}"));
 
+                // Part A: Build spatial index once before the parcel loop
+                var swTotal = System.Diagnostics.Stopwatch.StartNew();
+                var swDecompose = new System.Diagnostics.Stopwatch();
+                var swNeighborCheck = new System.Diagnostics.Stopwatch();
+                var swWidthInference = new System.Diagnostics.Stopwatch();
+                var swWriting = new System.Diagnostics.Stopwatch();
+
+                var spatialIndex = new Step4SpatialIndex(parcelTuples, null, infOptions.MaxSearchDistance);
+                DateTime lastProgressTime = DateTime.MinValue;
+                int lastReportedPct = -1;
+
                 foreach (var p in mainParcelsList)
                 {
                     mainIdx++;
                     double curPct = totalMainParcels > 0 ? 15.0 + (70.0 * mainIdx / totalMainParcels) : 50.0;
-                    ReportProgress(curPct, "الخطوة 4: تفكيك الواجهات واستشعار الشوارع", $"القطعة {mainIdx} من {totalMainParcels} (القطعة: {p.PlotId}): تفكيك الاتجاهات واستشعار الشوارع", phase: "المرحلة 4 من 5");
+                    int curPctInt = (int)Math.Round(curPct);
+
+                    // Throttled progress: at most once every ~250ms or 1%
+                    if ((DateTime.Now - lastProgressTime).TotalMilliseconds >= 250 || curPctInt > lastReportedPct || mainIdx == totalMainParcels)
+                    {
+                        lastProgressTime = DateTime.Now;
+                        lastReportedPct = curPctInt;
+                        ReportProgress(curPct, "الخطوة 4: تفكيك الواجهات واستشعار الشوارع", $"القطعة {mainIdx} من {totalMainParcels} (القطعة: {p.PlotId}): تفكيك الاتجاهات واستشعار الشوارع", phase: "المرحلة 4 من 5");
+                    }
+
                     if (!_parcelGeometries.TryGetValue(p.InternalId, out var poly)) continue;
 
+                    swDecompose.Start();
                     var cardinalDict = FacadeDecomposer.DecomposeTo4Cardinals(
                         poly, 
                         p, 
@@ -151,15 +172,19 @@ public partial class Cad2GisDockpaneViewModel
                         ChamferAngleToleranceDeg,
                         borderOptions,
                         SelectedUtmZone);
+                    swDecompose.Stop();
 
-                    // Sense neighbors (shared segment >= 0.5m) or infer undrawn road width via single ray
+                    // Sense neighbors (shared segment >= 0.5m) using Spatial Index or infer undrawn road width
                     OutwardRaySensor.SenseAndEnrichBorders(
                         p, 
                         cardinalDict, 
                         parcelTuples, 
                         inferenceOptions: infOptions, 
                         minSharedSegmentLength: MinSharedSegmentLength,
-                        qaLog: msg => System.Diagnostics.Debug.WriteLine($"[Step 4 QA] {msg}"));
+                        qaLog: msg => System.Diagnostics.Debug.WriteLine($"[Step 4 QA] {msg}"),
+                        spatialIndex: spatialIndex,
+                        swNeighborCheck: swNeighborCheck,
+                        swWidthInference: swWidthInference);
 
                     p.Borders.Clear();
                     foreach (var item in cardinalDict.Values)
@@ -187,6 +212,10 @@ public partial class Cad2GisDockpaneViewModel
                         }
                     }
                 }
+
+                swTotal.Stop();
+                string timingLog = $"[Step 4 Performance] Total: {swTotal.ElapsedMilliseconds} ms. Decompose: {swDecompose.ElapsedMilliseconds} ms, Neighbor Check: {swNeighborCheck.ElapsedMilliseconds} ms, Width Inference: {swWidthInference.ElapsedMilliseconds} ms, Writing/Init: {swWriting.ElapsedMilliseconds} ms for {totalMainParcels} MAIN parcels.";
+                System.Diagnostics.Debug.WriteLine(timingLog);
             });
 
             // UI updates directly on the UI thread

@@ -2119,6 +2119,266 @@ public static class GdbFeatureClassService
         return rep.ConstructedParcels;
     }
 
+    public class LineWithDataLayerReport
+    {
+        public bool Success { get; set; } = true;
+        public string DiagnosticMessage { get; set; } = string.Empty;
+        public string GpMessages { get; set; } = string.Empty;
+        public string OutputPath { get; set; } = string.Empty;
+        public long OutputPolygonCount { get; set; }
+        public List<(Polygon Polygon, LayerAttributionResult Attribution)> ConstructedParcels { get; } = new();
+    }
+
+    /// <summary>
+    /// Implements Section C.3: "Line with data layer" mode.
+    /// Combines selected Main and Sub line layers, splits them at vertices into a temporary scratch feature class
+    /// so each segment retains its CAD layer, runs Feature To Polygon into Cad_Constructed_Parcels,
+    /// and attributes each constructed parcel to its dominant CAD layer using a spatial index.
+    /// Cleans up temporary scratch datasets in all cases.
+    /// </summary>
+    public static async Task<LineWithDataLayerReport> RunLineWithDataLayerReportAsync(
+        string gdbPath,
+        string datasetName,
+        IEnumerable<string> eligibleLayerNames,
+        ISet<string>? subLayerNames = null,
+        IReadOnlyDictionary<string, string>? layerUsageMap = null,
+        IReadOnlyDictionary<string, string>? layerUsageTextMap = null,
+        double snapToleranceMeters = 0.0,
+        int epsgCode = 0,
+        string outFcName = "Cad_Constructed_Parcels",
+        DominantLayerMatcherOptions? matcherOptions = null)
+    {
+        var report = new LineWithDataLayerReport();
+        if (!Directory.Exists(gdbPath))
+        {
+            report.Success = false;
+            report.DiagnosticMessage = $"Geodatabase not found at: {gdbPath}";
+            return report;
+        }
+
+        string polylineFcPath = !string.IsNullOrWhiteSpace(datasetName)
+            ? Path.Combine(gdbPath, datasetName, "Polyline")
+            : Path.Combine(gdbPath, "Polyline");
+
+        string outFcPath = Path.Combine(gdbPath, outFcName);
+        report.OutputPath = outFcPath;
+
+        var layerList = eligibleLayerNames?.Where(l => !string.IsNullOrWhiteSpace(l)).Distinct().ToList() ?? new List<string>();
+        if (layerList.Count == 0)
+        {
+            report.Success = false;
+            report.DiagnosticMessage = "No CAD layers selected in Step 1. Please select at least one layer to polygonize.";
+            return report;
+        }
+
+        string actualPolylinePath = polylineFcPath;
+        long totalLinesInFc = 0;
+        int detectedWkid = epsgCode;
+        string linearUnitName = "Meter";
+        string preflightError = string.Empty;
+
+        await ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() =>
+        {
+            try
+            {
+                using var gdb = new Geodatabase(new FileGeodatabaseConnectionPath(new Uri(gdbPath)));
+                using var fc = OpenDatasetFeatureClass(gdb, "Polyline");
+                if (fc == null)
+                {
+                    preflightError = $"Dataset '{datasetName}' does not exist or does not contain 'Polyline' feature class in '{gdbPath}'.";
+                    return;
+                }
+
+                var def = fc.GetDefinition();
+                actualPolylinePath = Path.Combine(gdbPath, def.GetName());
+                totalLinesInFc = fc.GetCount();
+                var sr = def.GetSpatialReference();
+                if (detectedWkid == 0 && sr != null) detectedWkid = sr.Wkid;
+                linearUnitName = sr?.Unit?.Name ?? (sr != null && sr.IsProjected ? "Meter" : "");
+            }
+            catch (Exception ex)
+            {
+                preflightError = $"Pre-flight inspection failed on '{polylineFcPath}': {ex.Message}";
+            }
+        });
+
+        if (!string.IsNullOrEmpty(preflightError))
+        {
+            report.Success = false;
+            report.DiagnosticMessage = preflightError;
+            return report;
+        }
+
+        string whereClause = BuildLayerWhere(layerList);
+        string tempLyr = "Cad_Selected_Lyr_" + Guid.NewGuid().ToString("N")[..8];
+        string tempSplitFcName = "temp_split_lines_" + Guid.NewGuid().ToString("N")[..8];
+        string tempSplitFcPath = Path.Combine(gdbPath, tempSplitFcName);
+
+        string clusterTolStr = snapToleranceMeters > 0.0001
+            ? $"{snapToleranceMeters.ToString(System.Globalization.CultureInfo.InvariantCulture)} {linearUnitName}"
+            : "";
+
+        var env = Geoprocessing.MakeEnvironmentArray(
+            workspace: gdbPath,
+            overwriteoutput: true,
+            outputZFlag: "Disabled",
+            outputMFlag: "Disabled"
+        );
+
+        try
+        {
+            // 1. Make feature layer with selected layers
+            var makeLyrArgs = Geoprocessing.MakeValueArray(actualPolylinePath, tempLyr, whereClause);
+            var lyrResult = await Geoprocessing.ExecuteToolAsync("management.MakeFeatureLayer", makeLyrArgs);
+            if (lyrResult.IsFailed)
+            {
+                report.Success = false;
+                report.DiagnosticMessage = $"MakeFeatureLayer failed with expression: {whereClause}\n{string.Join(Environment.NewLine, lyrResult.Messages?.Select(m => m.Text) ?? Array.Empty<string>())}";
+                return report;
+            }
+
+            // Clean any pre-existing temp or out feature classes
+            try { await Geoprocessing.ExecuteToolAsync("management.Delete", Geoprocessing.MakeValueArray(tempSplitFcPath)); } catch { }
+            try { await Geoprocessing.ExecuteToolAsync("management.Delete", Geoprocessing.MakeValueArray(outFcPath)); } catch { }
+
+            // 2. Split lines at vertices into scratch feature class so each segment keeps its Layer attribute
+            var splitArgs = Geoprocessing.MakeValueArray(tempLyr, tempSplitFcPath);
+            var splitResult = await Geoprocessing.ExecuteToolAsync("management.SplitLine", splitArgs, env);
+            if (splitResult.IsFailed)
+            {
+                report.Success = false;
+                report.DiagnosticMessage = $"management.SplitLine failed.\n{string.Join(Environment.NewLine, splitResult.Messages?.Select(m => m.Text) ?? Array.Empty<string>())}";
+                return report;
+            }
+
+            // 3. Feature To Polygon
+            var f2pArgs = Geoprocessing.MakeValueArray(tempLyr, outFcPath, clusterTolStr, "NO_ATTRIBUTES");
+            var f2pResult = await Geoprocessing.ExecuteToolAsync("management.FeatureToPolygon", f2pArgs, env);
+            if (f2pResult.IsFailed)
+            {
+                report.Success = false;
+                report.DiagnosticMessage = $"FeatureToPolygon failed in Line with data layer mode.\n{string.Join(Environment.NewLine, f2pResult.Messages?.Select(m => m.Text) ?? Array.Empty<string>())}";
+                return report;
+            }
+        }
+        finally
+        {
+            try { await Geoprocessing.ExecuteToolAsync("management.Delete", Geoprocessing.MakeValueArray(tempLyr)); } catch { }
+        }
+
+        // 4. Attribute parcels from split line segments using DominantLayerMatcher and spatial index
+        try
+        {
+            await ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() =>
+            {
+                using var gdb = new Geodatabase(new FileGeodatabaseConnectionPath(new Uri(gdbPath)));
+
+                // A. Read segments from temp split FC
+                var segments = new List<LayerSegment2D>();
+                using (var splitFc = gdb.OpenDataset<FeatureClass>(tempSplitFcName))
+                {
+                    if (splitFc != null)
+                    {
+                        var sDef = splitFc.GetDefinition();
+                        int lyrFieldIdx = sDef.FindField("Layer");
+
+                        using var cur = splitFc.Search(null, false);
+                        while (cur.MoveNext())
+                        {
+                            using var feat = (Feature)cur.Current;
+                            string lVal = lyrFieldIdx >= 0 ? feat[lyrFieldIdx]?.ToString()?.Trim() ?? "" : "";
+                            if (feat.GetShape() is Polyline pl && !pl.IsEmpty)
+                            {
+                                foreach (var part in pl.Parts)
+                                {
+                                    foreach (var seg in part)
+                                    {
+                                        segments.Add(new LayerSegment2D(
+                                            new Point2D(seg.StartPoint.X, seg.StartPoint.Y),
+                                            new Point2D(seg.EndPoint.X, seg.EndPoint.Y),
+                                            lVal));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                var matcher = new DominantLayerMatcher(segments, matcherOptions);
+
+                // B. Read constructed polygons and attribute each parcel
+                using (var outFc = gdb.OpenDataset<FeatureClass>(outFcName))
+                {
+                    if (outFc != null)
+                    {
+                        var oDef = outFc.GetDefinition();
+                        var fcSr = oDef.GetSpatialReference();
+                        var targetSr = detectedWkid > 0 ? SpatialReferenceBuilder.CreateSpatialReference(detectedWkid) : fcSr;
+
+                        using var cur = outFc.Search(null, false);
+                        while (cur.MoveNext())
+                        {
+                            using var feat = (Feature)cur.Current;
+                            if (feat.GetShape() is Polygon poly && !poly.IsEmpty && poly.Area > 0.000001)
+                            {
+                                var poly2D = ParcelPolygonizer.Ensure2D(poly);
+                                if (targetSr != null && (poly2D.SpatialReference == null || !poly2D.SpatialReference.IsEqual(targetSr)))
+                                {
+                                    var pb = new PolygonBuilderEx(poly2D) { SpatialReference = targetSr };
+                                    pb.HasZ = false;
+                                    pb.HasM = false;
+                                    poly2D = (Polygon)pb.ToGeometry();
+                                }
+
+                                // Extract outer ring segments
+                                var bSegs = new List<Segment2D>();
+                                foreach (var part in poly2D.Parts)
+                                {
+                                    foreach (var seg in part)
+                                    {
+                                        bSegs.Add(new Segment2D(
+                                            new Point2D(seg.StartPoint.X, seg.StartPoint.Y),
+                                            new Point2D(seg.EndPoint.X, seg.EndPoint.Y)));
+                                    }
+                                }
+
+                                var attr = matcher.AttributeParcel(bSegs, subLayerNames, layerUsageMap, layerUsageTextMap);
+                                report.ConstructedParcels.Add((poly2D, attr));
+                            }
+                        }
+                    }
+                }
+            });
+
+            report.OutputPolygonCount = report.ConstructedParcels.Count;
+            report.Success = report.OutputPolygonCount > 0;
+            if (!report.Success)
+            {
+                report.DiagnosticMessage = "Feature To Polygon completed but 0 valid parcels were constructed.";
+            }
+            else
+            {
+                report.DiagnosticMessage = $"Line with data layer completed successfully: {report.OutputPolygonCount} parcels constructed and attributed.";
+            }
+        }
+        catch (Exception ex)
+        {
+            report.Success = false;
+            report.DiagnosticMessage = $"Error during parcel attribution: {ex.Message}";
+        }
+        finally
+        {
+            // 5. Cleanup: delete temporary scratch segment feature class
+            try
+            {
+                await Geoprocessing.ExecuteToolAsync("management.Delete", Geoprocessing.MakeValueArray(tempSplitFcPath));
+            }
+            catch { }
+        }
+
+        return report;
+    }
+
     public static async Task<FeatureToPolygonReport> RunArcPyLineToPolygonToolAsync(
         string gdbPath,
         string datasetName,

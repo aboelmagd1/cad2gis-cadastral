@@ -386,4 +386,54 @@ public partial class Cad2GisDockpaneViewModel
         }
     }
 
+    public ObservableCollection<string> LayerUsageOptions { get; } = new();
+
+    private ICommand? _refreshUsageTypesCommand;
+    public ICommand RefreshUsageTypesCommand =>
+        _refreshUsageTypesCommand ??= new RelayCommand(() => RefreshLayerUsageOptions(notifyUser: true));
+
+    public void RefreshLayerUsageOptions(bool notifyUser = false)
+    {
+        // 1. Re-read official Usage Types from Required Fields Excel
+        if (File.Exists(_helperManager.RequiredFieldsExcel))
+        {
+            MunicipalLookups.LoadUsageTypesFromRequiredFieldsExcel(_helperManager.RequiredFieldsExcel);
+        }
+
+        // 2. Re-populate LayerUsageOptions collection
+        LayerUsageOptions.Clear();
+        LayerUsageOptions.Add(""); // Empty / Default: no layer-level USAGE
+
+        foreach (var kvp in MunicipalLookups.OfficialUsageTypes)
+        {
+            LayerUsageOptions.Add($"{kvp.Key} — {kvp.Value}");
+        }
+
+        // 3. Validate existing SelectedUsage values on CadLayers
+        int clearedCount = 0;
+        foreach (var cl in CadLayers)
+        {
+            if (string.IsNullOrWhiteSpace(cl.SelectedUsage)) continue;
+            string code = cl.SelectedUsage;
+            int dashIdx = code.IndexOf(" — ");
+            if (dashIdx > 0) code = code.Substring(0, dashIdx).Trim();
+            code = code.Trim();
+
+            if (!MunicipalLookups.IsOfficialUsageType(code))
+            {
+                System.Diagnostics.Debug.WriteLine($"[Layer Usage Warning] Stored usage code '{cl.SelectedUsage}' for layer '{cl.LayerName}' is no longer in 'Usage Types' sheet. Cleared.");
+                cl.SelectedUsage = string.Empty;
+                clearedCount++;
+            }
+        }
+
+        if (notifyUser)
+        {
+            string msg = $"تم تحديث قائمة أنواع الاستخدام ({MunicipalLookups.OfficialUsageTypes.Count} نوع معتمد).";
+            if (clearedCount > 0)
+                msg += $"\nتم مسح {clearedCount} قيمة غير مطابقة لورقة الاستخدامات.";
+            StatusMessage = msg;
+        }
+    }
 }
+

@@ -40,7 +40,7 @@ x86/
 # 3. ArcGIS Pro Add-In Packages & Geodatabase Artifacts
 # -----------------------------------------------------------------------------
 # Exclude packaged binaries (they should be built from source)
-*.esriAddinX
+# *.esriAddinX
 *.zip
 *.rar
 *.7z

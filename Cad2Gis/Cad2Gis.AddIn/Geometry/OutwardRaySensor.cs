@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using ArcGIS.Core.Geometry;
+using Cad2Gis.Core.Geometry;
 using Cad2Gis.Core.Lookups;
 using Cad2Gis.Core.Models;
 using Cad2Gis.Core.Services;
@@ -17,6 +19,129 @@ public class NeighborTouchInfo
     public string NeighborPlotId { get; set; } = string.Empty;
 }
 
+public class ParcelSpatialItem
+{
+    public ParcelRecord Parcel { get; }
+    public Polygon Geometry { get; }
+    public Box2D Envelope { get; }
+    public Segment2D[] OuterSegments { get; }
+
+    public ParcelSpatialItem(ParcelRecord parcel, Polygon geometry, Box2D envelope, Segment2D[] outerSegments)
+    {
+        Parcel = parcel;
+        Geometry = geometry;
+        Envelope = envelope;
+        OuterSegments = outerSegments;
+    }
+}
+
+public class Step4SpatialIndex
+{
+    public SpatialGrid2D<ParcelSpatialItem> Grid { get; }
+    public Dictionary<long, ParcelSpatialItem> ItemsById { get; }
+    public Dictionary<long, Polygon> BufferedNeighbors { get; }
+    public List<Segment2D> RoadSegments { get; }
+
+    public Step4SpatialIndex(
+        IEnumerable<(ParcelRecord Parcel, Polygon Geometry)> parcels,
+        IReadOnlyList<Polyline>? roadLines = null,
+        double cellSize = 100.0)
+    {
+        Grid = new SpatialGrid2D<ParcelSpatialItem>(cellSize);
+        ItemsById = new Dictionary<long, ParcelSpatialItem>();
+        BufferedNeighbors = new Dictionary<long, Polygon>();
+        RoadSegments = new List<Segment2D>();
+
+        foreach (var (p, poly) in parcels)
+        {
+            if (poly == null || poly.IsEmpty) continue;
+            var ext = poly.Extent;
+            var box = new Box2D(ext.XMin, ext.YMin, ext.XMax, ext.YMax);
+
+            // Precompute outer segments using real segments where available
+            var segList = new List<Segment2D>();
+            try
+            {
+                if (poly.Parts.Count > 0)
+                {
+                    foreach (var seg in poly.Parts[0])
+                    {
+                        segList.Add(new Segment2D(
+                            new Point2D(seg.StartPoint.X, seg.StartPoint.Y),
+                            new Point2D(seg.EndPoint.X, seg.EndPoint.Y),
+                            elementId: !string.IsNullOrEmpty(p.PlotId) ? p.PlotId : p.TemporaryParcelClass,
+                            elementType: p.Class == ParcelClass.Main ? "Parcel" : "SubParcel"
+                        ));
+                    }
+                }
+            }
+            catch
+            {
+                var pts = poly.Points;
+                for (int i = 0; i < pts.Count - 1; i++)
+                {
+                    segList.Add(new Segment2D(
+                        new Point2D(pts[i].X, pts[i].Y),
+                        new Point2D(pts[i + 1].X, pts[i + 1].Y),
+                        elementId: !string.IsNullOrEmpty(p.PlotId) ? p.PlotId : p.TemporaryParcelClass,
+                        elementType: p.Class == ParcelClass.Main ? "Parcel" : "SubParcel"
+                    ));
+                }
+            }
+
+            var item = new ParcelSpatialItem(p, poly, box, segList.ToArray());
+            ItemsById[p.InternalId] = item;
+            Grid.Insert(item, box);
+        }
+
+        if (roadLines != null)
+        {
+            foreach (var rLine in roadLines)
+            {
+                if (rLine == null || rLine.IsEmpty) continue;
+                try
+                {
+                    foreach (var part in rLine.Parts)
+                    {
+                        foreach (var seg in part)
+                        {
+                            RoadSegments.Add(new Segment2D(
+                                new Point2D(seg.StartPoint.X, seg.StartPoint.Y),
+                                new Point2D(seg.EndPoint.X, seg.EndPoint.Y),
+                                elementId: "RoadEdge",
+                                elementType: "Road"
+                            ));
+                        }
+                    }
+                }
+                catch
+                {
+                    var pts = rLine.Points;
+                    for (int i = 0; i < pts.Count - 1; i++)
+                    {
+                        RoadSegments.Add(new Segment2D(
+                            new Point2D(pts[i].X, pts[i].Y),
+                            new Point2D(pts[i + 1].X, pts[i + 1].Y),
+                            elementId: "RoadEdge",
+                            elementType: "Road"
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    public Polygon GetOrCreateBuffered(long parcelId, Polygon poly, double snapTolerance)
+    {
+        if (BufferedNeighbors.TryGetValue(parcelId, out var cached))
+            return cached;
+
+        var buffered = GeometryEngine.Instance.Buffer(poly, snapTolerance) as Polygon;
+        BufferedNeighbors[parcelId] = buffered ?? poly;
+        return BufferedNeighbors[parcelId];
+    }
+}
+
 public static class OutwardRaySensor
 {
     public static void SenseAndEnrichBorders(
@@ -26,60 +151,15 @@ public static class OutwardRaySensor
         IReadOnlyList<Polyline>? roadLines = null,
         WidthInferenceOptions? inferenceOptions = null,
         double minSharedSegmentLength = 0.5,
-        Action<string>? qaLog = null)
+        Action<string>? qaLog = null,
+        Step4SpatialIndex? spatialIndex = null,
+        Stopwatch? swNeighborCheck = null,
+        Stopwatch? swWidthInference = null)
     {
         var options = inferenceOptions ?? new WidthInferenceOptions();
-        var currentGeom = allParcels.FirstOrDefault(p => p.Parcel.InternalId == currentParcel.InternalId).Geometry;
-
-        // Build obstacle segments for width inference
-        var obstacleSegments = new List<Segment2D>();
-        foreach (var other in allParcels)
-        {
-            if (other.Parcel.InternalId == currentParcel.InternalId) continue;
-            if (other.Geometry == null || other.Geometry.IsEmpty) continue;
-
-            // Section 5.1 Rule 2: Facing obstacle must not be touching current parcel and must not be closer than MIN_FACING_GAP (1.0m)
-            if (currentGeom != null && !currentGeom.IsEmpty)
-            {
-                try
-                {
-                    double dist = GeometryEngine.Instance.Distance(currentGeom, other.Geometry);
-                    if (dist < (options.MinFacingGap - 1e-4))
-                    {
-                        continue; // Touching or closer than 1m -> neighbor, not facing parcel across street!
-                    }
-                }
-                catch { }
-            }
-
-            var pts = other.Geometry.Points;
-            for (int i = 0; i < pts.Count - 1; i++)
-            {
-                obstacleSegments.Add(new Segment2D(
-                    new Point2D(pts[i].X, pts[i].Y),
-                    new Point2D(pts[i + 1].X, pts[i + 1].Y),
-                    elementId: !string.IsNullOrEmpty(other.Parcel.PlotId) ? other.Parcel.PlotId : other.Parcel.TemporaryParcelClass,
-                    elementType: other.Parcel.Class == ParcelClass.Main ? "Parcel" : "SubParcel"
-                ));
-            }
-        }
-
-        if (roadLines != null)
-        {
-            foreach (var rLine in roadLines)
-            {
-                var pts = rLine.Points;
-                for (int i = 0; i < pts.Count - 1; i++)
-                {
-                    obstacleSegments.Add(new Segment2D(
-                        new Point2D(pts[i].X, pts[i].Y),
-                        new Point2D(pts[i + 1].X, pts[i + 1].Y),
-                        elementId: "RoadEdge",
-                        elementType: "Road"
-                    ));
-                }
-            }
-        }
+        var index = spatialIndex ?? new Step4SpatialIndex(allParcels, roadLines, options.MaxSearchDistance);
+        index.ItemsById.TryGetValue(currentParcel.InternalId, out var currentItem);
+        var currentGeom = currentItem?.Geometry ?? allParcels.FirstOrDefault(p => p.Parcel.InternalId == currentParcel.InternalId).Geometry;
 
         foreach (var kvp in borders)
         {
@@ -90,10 +170,12 @@ public static class OutwardRaySensor
             var detectedNeighbors = new List<NeighborTouchInfo>();
 
             // 1. Check adjoining touch neighbors with eligible shared segment length >= 0.5m
+            swNeighborCheck?.Start();
+
             SpatialReference? activeSr = borderGeom.SpatialReference;
             if (activeSr == null)
             {
-                activeSr = allParcels.FirstOrDefault(p => p.Geometry?.SpatialReference != null).Geometry?.SpatialReference;
+                activeSr = currentGeom?.SpatialReference ?? allParcels.FirstOrDefault(p => p.Geometry?.SpatialReference != null).Geometry?.SpatialReference;
                 if (activeSr != null)
                 {
                     var pb = new PolylineBuilderEx(borderGeom) { SpatialReference = activeSr };
@@ -110,13 +192,19 @@ public static class OutwardRaySensor
                 snapTolerance = 0.05 / activeSr.Unit.ConversionFactor;
             }
 
-            foreach (var other in allParcels)
-            {
-                if (other.Parcel.InternalId == currentParcel.InternalId) continue;
-                if (!string.IsNullOrEmpty(other.Parcel.PlotId) &&
-                    string.Equals(other.Parcel.PlotId, currentParcel.PlotId, StringComparison.OrdinalIgnoreCase)) continue;
+            // Spatial filter for neighbor candidates: query index with border extent expanded by snapTolerance
+            var borderExt = borderGeom.Extent;
+            var borderBox = new Box2D(borderExt.XMin, borderExt.YMin, borderExt.XMax, borderExt.YMax).Expand(snapTolerance);
+            var neighborCandidates = index.Grid.Query(borderBox);
 
-                var otherGeom = other.Geometry;
+            foreach (var otherItem in neighborCandidates)
+            {
+                var other = otherItem.Parcel;
+                if (other.InternalId == currentParcel.InternalId) continue;
+                if (!string.IsNullOrEmpty(other.PlotId) &&
+                    string.Equals(other.PlotId, currentParcel.PlotId, StringComparison.OrdinalIgnoreCase)) continue;
+
+                var otherGeom = otherItem.Geometry;
                 if (otherGeom == null || otherGeom.IsEmpty) continue;
 
                 try
@@ -128,8 +216,8 @@ public static class OutwardRaySensor
                         otherGeom = (Polygon)b.ToGeometry();
                     }
 
-                    // Buffer neighbor polygon by snap tolerance (0.05m) to catch coincident CAD boundaries
-                    var neighborBuffered = GeometryEngine.Instance.Buffer(otherGeom, snapTolerance) as Polygon;
+                    // Buffer neighbor polygon by snap tolerance (0.05m) to catch coincident CAD boundaries (cached per parcel)
+                    var neighborBuffered = index.GetOrCreateBuffered(other.InternalId, otherGeom, snapTolerance);
                     if (neighborBuffered == null || neighborBuffered.IsEmpty) continue;
 
                     if (GeometryEngine.Instance.Intersects(borderGeom, neighborBuffered))
@@ -145,7 +233,7 @@ public static class OutwardRaySensor
                         // Only eligible if sharedLength >= 0.5 meters (effectiveMinSharedLength)
                         if (sharedLength >= (effectiveMinSharedLength - 1e-4))
                         {
-                            bool isMainNeighbor = other.Parcel.Class == ParcelClass.Main || other.Parcel.ParcelTyp == 1;
+                            bool isMainNeighbor = other.Class == ParcelClass.Main || other.ParcelTyp == 1;
                             string bType;
                             string descPart;
 
@@ -153,38 +241,38 @@ public static class OutwardRaySensor
                             {
                                 // Section 3.2: MAIN neighbor -> PLT directly (no text matching)
                                 bType = "PLT";
-                                descPart = $"قطعة رقم {other.Parcel.PlotId}";
+                                descPart = $"قطعة رقم {other.PlotId}";
                             }
                             else
                             {
                                 // Section 3.2: SUB neighbor -> check REMARKS then USAGE via Keywords table
                                 string? matchedCode = null;
-                                if (!string.IsNullOrWhiteSpace(other.Parcel.Remarks))
+                                if (!string.IsNullOrWhiteSpace(other.Remarks))
                                 {
-                                    var m = MunicipalLookups.MatchBorderTypeFromKeywords(other.Parcel.Remarks, "REMARKS");
+                                    var m = MunicipalLookups.MatchBorderTypeFromKeywords(other.Remarks, "REMARKS");
                                     if (!string.IsNullOrEmpty(m.Code) && MunicipalLookups.IsOfficialBorderType(m.Code))
                                         matchedCode = m.Code;
                                 }
-                                if (string.IsNullOrEmpty(matchedCode) && !string.IsNullOrWhiteSpace(other.Parcel.Usage))
+                                if (string.IsNullOrEmpty(matchedCode) && !string.IsNullOrWhiteSpace(other.Usage))
                                 {
-                                    var m = MunicipalLookups.MatchBorderTypeFromKeywords(other.Parcel.Usage, "USAGE");
+                                    var m = MunicipalLookups.MatchBorderTypeFromKeywords(other.Usage, "USAGE");
                                     if (!string.IsNullOrEmpty(m.Code) && MunicipalLookups.IsOfficialBorderType(m.Code))
                                         matchedCode = m.Code;
                                 }
-                                if (string.IsNullOrEmpty(matchedCode) && string.Equals(other.Parcel.Usage, "UTL", StringComparison.OrdinalIgnoreCase))
+                                if (string.IsNullOrEmpty(matchedCode) && string.Equals(other.Usage, "UTL", StringComparison.OrdinalIgnoreCase))
                                 {
                                     matchedCode = "UTL";
                                 }
 
                                 if (string.IsNullOrEmpty(matchedCode))
                                 {
-                                    qaLog?.Invoke($"Plot {currentParcel.PlotId} border {cardinal}: Shared segment of {sharedLength:F2}m with SUB neighbor (Plot {other.Parcel.PlotId}) has no approved BORDERTYPE match for text '{other.Parcel.Remarks}'. Left blank.");
+                                    qaLog?.Invoke($"Plot {currentParcel.PlotId} border {cardinal}: Shared segment of {sharedLength:F2}m with SUB neighbor (Plot {other.PlotId}) has no approved BORDERTYPE match for text '{other.Remarks}'. Left blank.");
                                 }
 
                                 bType = matchedCode ?? string.Empty;
-                                descPart = !string.IsNullOrWhiteSpace(other.Parcel.Remarks)
-                                    ? other.Parcel.Remarks
-                                    : (!string.IsNullOrWhiteSpace(other.Parcel.SubType) ? other.Parcel.SubType : other.Parcel.PlotId);
+                                descPart = !string.IsNullOrWhiteSpace(other.Remarks)
+                                    ? other.Remarks
+                                    : (!string.IsNullOrWhiteSpace(other.SubType) ? other.SubType : other.PlotId);
                             }
 
                             detectedNeighbors.Add(new NeighborTouchInfo
@@ -193,16 +281,17 @@ public static class OutwardRaySensor
                                 DescriptionPart = descPart,
                                 ContactLength = sharedLength,
                                 IsMain = isMainNeighbor,
-                                NeighborPlotId = other.Parcel.PlotId
+                                NeighborPlotId = other.PlotId
                             });
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[OutwardRaySensor] Intersect check skipped for neighbor {other.Parcel.PlotId}: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"[OutwardRaySensor] Intersect check skipped for neighbor {other.PlotId}: {ex.Message}");
                 }
             }
+            swNeighborCheck?.Stop();
 
             if (detectedNeighbors.Count > 0)
             {
@@ -264,20 +353,57 @@ public static class OutwardRaySensor
 
                 borderRec.IsInferred = false;
                 borderRec.IsUnknown = false;
-
-                // NOTE: borderRec.Dimension is NOT modified here; it is determined strictly by segment angles (Section 6)
             }
             else
             {
                 // 2. No adjoining parcel/sub-parcel found -> Perform Width Inference
-                // Anchor rays at the midpoint (by length) of its longest constituent piece, using that piece's outward normal (Section A6)
+                // Build obstacle segments lazily and locally from parcels in search range
+                swWidthInference?.Start();
+
                 var pts = borderGeom.Points;
                 if (pts.Count >= 2)
                 {
+                    var obstacleSegments = new List<Segment2D>();
+                    var searchBox = borderBox.Expand(options.MaxSearchDistance);
+                    var obstacleCandidates = index.Grid.Query(searchBox);
+
+                    foreach (var otherItem in obstacleCandidates)
+                    {
+                        if (otherItem.Parcel.InternalId == currentParcel.InternalId) continue;
+                        if (otherItem.Geometry == null || otherItem.Geometry.IsEmpty) continue;
+
+                        // Minimum facing gap: envelope check first to skip exact distance
+                        if (currentGeom != null && !currentGeom.IsEmpty && currentItem != null)
+                        {
+                            double boxDist = currentItem.Envelope.DistanceTo(otherItem.Envelope);
+                            if (boxDist < (options.MinFacingGap - 1e-4))
+                            {
+                                try
+                                {
+                                    double dist = GeometryEngine.Instance.Distance(currentGeom, otherItem.Geometry);
+                                    if (dist < (options.MinFacingGap - 1e-4))
+                                    {
+                                        continue; // Touching or closer than 1m -> neighbor, not facing parcel across street!
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+
+                        if (otherItem.OuterSegments != null && otherItem.OuterSegments.Length > 0)
+                        {
+                            obstacleSegments.AddRange(otherItem.OuterSegments);
+                        }
+                    }
+
+                    if (index.RoadSegments.Count > 0)
+                    {
+                        obstacleSegments.AddRange(index.RoadSegments);
+                    }
+
                     Segment2D seg;
                     if (pts.Count > 2)
                     {
-                        // Final line has bends: find longest constituent piece by length
                         double maxLen = -1;
                         int bestIdx = 0;
                         for (int i = 0; i < pts.Count - 1; i++)
@@ -298,11 +424,6 @@ public static class OutwardRaySensor
                         seg = new Segment2D(new Point2D(pts[0].X, pts[0].Y), new Point2D(pts[pts.Count - 1].X, pts[pts.Count - 1].Y));
                     }
 
-                    // Outward normal vector:
-                    // 1 = North: (0, 1)
-                    // 2 = East:  (1, 0)
-                    // 3 = South: (0, -1)
-                    // 4 = West:  (-1, 0)
                     Point2D normal;
                     if (borderRec.OutwardNormalAzimuth > 0.001)
                     {
@@ -331,6 +452,7 @@ public static class OutwardRaySensor
                     borderRec.Descriptio = "";
                     borderRec.BorderType = "";
                 }
+                swWidthInference?.Stop();
             }
         }
     }

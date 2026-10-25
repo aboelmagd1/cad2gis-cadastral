@@ -70,10 +70,3 @@ Keyword,AppliesTo,MatchType,BorderTypeCode,Priority,Notes
 القطعة,BOTH,exact,PLT,3,القطعة
 قطعة,BOTH,contains,PLT,3,القطعة
 جار,BOTH,contains,NGB,3,جار
-سكني,USAGE,exact,RSD,1,سكني
-تجاري,USAGE,exact,COM,1,تجاري
-سكني تجاري,USAGE,exact,RSC,1,سكني تجاري
-تجاري سكني,USAGE,exact,RSC,1,تجاري سكني
-زراعي,USAGE,exact,AGR,1,زراعي
-صناعي,USAGE,exact,IND,1,صناعي
-مرافق,USAGE,exact,UTL,1,مرافق

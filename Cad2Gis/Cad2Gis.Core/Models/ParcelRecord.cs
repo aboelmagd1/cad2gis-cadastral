@@ -69,5 +69,34 @@ public class ParcelRecord
     // Associated 4-cardinal borders (Only for MAIN parcels)
     public List<BorderRecord> Borders { get; set; } = new();
 
+    /// <summary>
+    /// Raw usage/description annotation or layer text captured during ingestion.
+    /// Internal field, never exported to shapefiles.
+    /// </summary>
+    public string UsageText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Layer-level default USAGE code assigned from Step 1 layer selection or dominant layer.
+    /// Internal field, used during Step 3 precedence resolution.
+    /// </summary>
+    public string LayerUsage { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Records which source supplied the final USAGE value ("Manual", "Excel", "Layer", "Fallback").
+    /// </summary>
+    public string UsageSource { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Indicates if USAGE was manually entered/edited by user, which must be protected.
+    /// </summary>
+    public bool HasUserAssignedUsage { get; set; } = false;
+
+    /// <summary>
+    /// Internal tracking of feature provenance (e.g. source layer or construction method).
+    /// Kept out of REMARKS so it never leaks into exported data.
+    /// </summary>
+    public string Provenance { get; set; } = string.Empty;
+
     public override string ToString() => $"Parcel {PlotId} [{TemporaryParcelClass}] (Plan: {PlanNo}, Usage: {Usage}, Area: {AreaSqm:F2} m²)";
 }
+

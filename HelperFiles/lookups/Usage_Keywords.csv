@@ -1,0 +1,10 @@
+Keyword,AppliesTo,MatchType,UsageCode,Priority,Notes
+سكني,BOTH,contains,RSD,1,سكني
+تجاري,BOTH,contains,COM,1,تجاري
+سكني تجاري,BOTH,contains,RSC,1,سكني تجاري
+تجاري سكني,BOTH,contains,RSC,1,تجاري سكني
+زراعي,BOTH,contains,AGR,1,زراعي
+صناعي,BOTH,contains,IND,1,صناعي
+مرافق,BOTH,contains,UTL,1,مرافق
+مرفق,BOTH,contains,UTL,1,مرفق
+خدمات,BOTH,contains,UTL,2,خدمات

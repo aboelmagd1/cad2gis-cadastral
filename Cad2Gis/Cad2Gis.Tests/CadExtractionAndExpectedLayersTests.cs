@@ -208,15 +208,16 @@ public class CadExtractionAndExpectedLayersTests
     [Fact]
     public void LayerGeometryModeService_ValidatesModesAndGeometryInclusion()
     {
-        // 1. Available Modes (ModeBoth, ModePolygon, and ModeLine)
+        // 1. Available Modes (ModeLine, ModePolygon, and ModeLineWithDataLayer)
         Assert.Equal(3, LayerGeometryModeService.AvailableModes.Length);
-        Assert.Contains(LayerGeometryModeService.ModeBoth, LayerGeometryModeService.AvailableModes);
+        Assert.Contains(LayerGeometryModeService.ModeLineWithDataLayer, LayerGeometryModeService.AvailableModes);
         Assert.Contains(LayerGeometryModeService.ModePolygon, LayerGeometryModeService.AvailableModes);
         Assert.Contains(LayerGeometryModeService.ModeLine, LayerGeometryModeService.AvailableModes);
 
-        // 2. Both Mode (Default): Ingests Polygons AND converts Lines
-        Assert.True(LayerGeometryModeService.ShouldIngestPolygons(LayerGeometryModeService.ModeBoth));
-        Assert.True(LayerGeometryModeService.ShouldPolygonizeLines(LayerGeometryModeService.ModeBoth));
+        // 2. Line with data layer: builds from lines, attributes to layer
+        Assert.False(LayerGeometryModeService.ShouldIngestPolygons(LayerGeometryModeService.ModeLineWithDataLayer));
+        Assert.True(LayerGeometryModeService.ShouldPolygonizeLines(LayerGeometryModeService.ModeLineWithDataLayer));
+        Assert.True(LayerGeometryModeService.IsLineWithDataLayer(LayerGeometryModeService.ModeLineWithDataLayer));
 
         // 3. Polygon Mode: Ingests Polygons, skips Lines unless forced
         Assert.True(LayerGeometryModeService.ShouldIngestPolygons(LayerGeometryModeService.ModePolygon));
@@ -226,6 +227,12 @@ public class CadExtractionAndExpectedLayersTests
         // 4. Line Mode: Skips Polygons, directly converts Lines to Polygons
         Assert.False(LayerGeometryModeService.ShouldIngestPolygons(LayerGeometryModeService.ModeLine));
         Assert.True(LayerGeometryModeService.ShouldPolygonizeLines(LayerGeometryModeService.ModeLine));
+
+        // 5. Backwards compatibility: legacy profile values map to Line with data layer
+        Assert.Equal(LayerGeometryModeService.ModeLineWithDataLayer, LayerGeometryModeService.NormalizeMode("Both (مضلعات وخطوط معاً)"));
+        Assert.Equal(LayerGeometryModeService.ModeLineWithDataLayer, LayerGeometryModeService.NormalizeMode("Both"));
+        Assert.Equal(LayerGeometryModeService.ModeLineWithDataLayer, LayerGeometryModeService.NormalizeMode("Polygon line"));
+        Assert.Equal(LayerGeometryModeService.ModeLineWithDataLayer, LayerGeometryModeService.NormalizeMode("Line with data layer"));
     }
 
     [Fact]

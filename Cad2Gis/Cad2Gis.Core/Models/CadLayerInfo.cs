@@ -148,6 +148,20 @@ public class CadLayerInfo : INotifyPropertyChanged
         }
     }
 
+    private string _selectedUsage = string.Empty;
+    public string SelectedUsage
+    {
+        get => _selectedUsage;
+        set
+        {
+            if (_selectedUsage != value)
+            {
+                _selectedUsage = value;
+                OnPropertyChanged(nameof(SelectedUsage));
+            }
+        }
+    }
+
     public string SampleText
     {
         get => _rawCadText;

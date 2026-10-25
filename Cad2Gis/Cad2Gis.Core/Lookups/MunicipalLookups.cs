@@ -368,14 +368,46 @@ public static class MunicipalLookups
     }
 
     /// <summary>
-    /// Classifies an Arabic text or token into one of the official 6 MOMRAH Usage Types (RSD, COM, RSC, AGR, IND, UTL).
-    /// Returns null if no match is found.
+    /// Classifies an Arabic text or token into one of the official MOMRAH Usage Types (RSD, COM, RSC, AGR, IND, UTL).
+    /// Matches against UsageKeywords if loaded, or standard keyword patterns. Returns null if no match is found.
     /// </summary>
     public static string? ClassifyUsageFromText(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return null;
-        string norm = Utils.ArabicTextNormalizer.Normalize(text, normalizeTehMarbuta: true).ToLowerInvariant();
+        string raw = text.Trim();
+        string upper = raw.ToUpperInvariant();
 
+        // 1. Direct match with official code
+        if (IsOfficialUsageType(upper)) return upper;
+
+        string norm = Utils.ArabicTextNormalizer.Normalize(raw, normalizeTehMarbuta: true).ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(norm)) return null;
+
+        // 2. Query UsageKeywords table if loaded
+        if (UsageKeywords.Count > 0)
+        {
+            var candidates = UsageKeywords
+                .OrderBy(k => k.Priority)
+                .ThenByDescending(k => k.Keyword.Length)
+                .ToList();
+
+            foreach (var item in candidates)
+            {
+                string normKw = Utils.ArabicTextNormalizer.Normalize(item.Keyword, normalizeTehMarbuta: true).ToLowerInvariant();
+                if (string.IsNullOrWhiteSpace(normKw)) continue;
+
+                if (item.MatchType.Equals("exact", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (norm == normKw) return item.UsageCode;
+                }
+                else
+                {
+                    if (norm == normKw || norm.Contains(normKw)) return item.UsageCode;
+                }
+            }
+        }
+
+        // 3. Built-in fallback normalization
         if (norm.Contains("سكني تجاري") || norm.Contains("تجاري سكني") || norm == "rsc")
             return "RSC";
         if (norm.Contains("سكني") || norm == "rsd")
@@ -646,6 +678,95 @@ public static class MunicipalLookups
             // 3. Load BorderType_Keywords.csv
             string kwFile = Path.Combine(lookupsDir, "BorderType_Keywords.csv");
             LoadBorderTypeKeywords(kwFile);
+
+            // 4. Load Usage_Keywords.csv
+            string uKwFile = Path.Combine(lookupsDir, "Usage_Keywords.csv");
+            LoadUsageKeywords(uKwFile);
+        }
+        catch { }
+    }
+
+    public static readonly List<UsageKeywordItem> UsageKeywords = new();
+
+    public static int LoadUsageKeywords(string csvPath, Action<string>? warningLog = null)
+    {
+        UsageKeywords.Clear();
+        if (string.IsNullOrWhiteSpace(csvPath)) return 0;
+
+        if (!File.Exists(csvPath))
+        {
+            EnsureUsageKeywordsFile(csvPath);
+        }
+
+        if (!File.Exists(csvPath)) return 0;
+
+        int loaded = 0;
+        try
+        {
+            var lines = File.ReadAllLines(csvPath);
+            for (int i = 1; i < lines.Length; i++)
+            {
+                string line = lines[i].Trim();
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                var parts = line.Split(',');
+                if (parts.Length < 4) continue;
+
+                string kw = parts[0].Trim();
+                string appliesTo = parts[1].Trim().ToUpperInvariant();
+                string matchType = parts[2].Trim().ToLowerInvariant();
+                string code = parts[3].Trim().ToUpperInvariant();
+                int priority = (parts.Length > 4 && int.TryParse(parts[4].Trim(), out int p)) ? p : 2;
+                string notes = parts.Length > 5 ? parts[5].Trim() : string.Empty;
+
+                if (!IsOfficialUsageType(code))
+                {
+                    warningLog?.Invoke($"تحذير: تم تجاهل صف كلمات الاستخدام الدلالية '{kw}' لأن الكود '{code}' غير موجود في ورقة Usage Types المعتمدة.");
+                    continue;
+                }
+
+                UsageKeywords.Add(new UsageKeywordItem
+                {
+                    Keyword = kw,
+                    AppliesTo = appliesTo,
+                    MatchType = matchType,
+                    UsageCode = code,
+                    Priority = priority,
+                    Notes = notes
+                });
+                loaded++;
+            }
+        }
+        catch (Exception ex)
+        {
+            warningLog?.Invoke($"خطأ أثناء قراءة ملف كلمات الاستخدام الدلالية: {ex.Message}");
+        }
+
+        return loaded;
+    }
+
+    public static void EnsureUsageKeywordsFile(string csvPath)
+    {
+        try
+        {
+            string? dir = Path.GetDirectoryName(csvPath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
+            if (File.Exists(csvPath)) return;
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("Keyword,AppliesTo,MatchType,UsageCode,Priority,Notes");
+            sb.AppendLine("سكني,BOTH,contains,RSD,1,سكني");
+            sb.AppendLine("تجاري,BOTH,contains,COM,1,تجاري");
+            sb.AppendLine("سكني تجاري,BOTH,contains,RSC,1,سكني تجاري");
+            sb.AppendLine("تجاري سكني,BOTH,contains,RSC,1,تجاري سكني");
+            sb.AppendLine("زراعي,BOTH,contains,AGR,1,زراعي");
+            sb.AppendLine("صناعي,BOTH,contains,IND,1,صناعي");
+            sb.AppendLine("مرافق,BOTH,contains,UTL,1,مرافق");
+            sb.AppendLine("مرفق,BOTH,contains,UTL,1,مرفق");
+            sb.AppendLine("خدمات,BOTH,contains,UTL,2,خدمات");
+            File.WriteAllText(csvPath, sb.ToString(), System.Text.Encoding.UTF8);
         }
         catch { }
     }
@@ -665,6 +786,16 @@ public class BorderTypeKeywordItem
     public string AppliesTo { get; set; } = "BOTH"; // REMARKS, USAGE, BOTH
     public string MatchType { get; set; } = "contains"; // exact, contains
     public string BorderTypeCode { get; set; } = string.Empty;
+    public int Priority { get; set; } = 1;
+    public string Notes { get; set; } = string.Empty;
+}
+
+public class UsageKeywordItem
+{
+    public string Keyword { get; set; } = string.Empty;
+    public string AppliesTo { get; set; } = "BOTH"; // REMARKS, USAGE, BOTH
+    public string MatchType { get; set; } = "contains"; // exact, contains
+    public string UsageCode { get; set; } = string.Empty;
     public int Priority { get; set; } = 1;
     public string Notes { get; set; } = string.Empty;
 }

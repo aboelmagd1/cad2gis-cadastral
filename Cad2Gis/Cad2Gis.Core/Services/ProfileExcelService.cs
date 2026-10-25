@@ -124,6 +124,26 @@ public static class ProfileExcelService
                 model.MaxCurveExportDeviationMeters = dDev;
             if (settings.TryGetValue("alsoKeepExactUtmGdbWithTrueCurves", out var gdbCurvStr) && bool.TryParse(gdbCurvStr, out bool bGdbCurv))
                 model.AlsoKeepExactUtmGdbWithTrueCurves = bGdbCurv;
+
+            // Geometry Mode setting (Part C.2)
+            if (settings.TryGetValue("geometryMode", out var gMode) && !string.IsNullOrWhiteSpace(gMode))
+                model.GeometryMode = LayerGeometryModeService.NormalizeMode(gMode);
+
+            // Layer USAGE mappings (Part C.1)
+            var luWs = workbook.Worksheets.FirstOrDefault(w => w.Name.Equals("Layer_Usages", StringComparison.OrdinalIgnoreCase));
+            if (luWs != null)
+            {
+                int luLastRow = luWs.LastRowUsed()?.RowNumber() ?? 0;
+                for (int r = 2; r <= luLastRow; r++)
+                {
+                    string layer = luWs.Cell(r, 1).GetString().Trim();
+                    string usage = luWs.Cell(r, 2).GetString().Trim();
+                    if (!string.IsNullOrEmpty(layer))
+                    {
+                        model.LayerUsageMap[layer] = usage;
+                    }
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -131,5 +151,84 @@ public static class ProfileExcelService
         }
 
         return model;
+    }
+
+    public static void SaveProfileToExcel(ConsultantProfileModel model, string excelPath)
+    {
+        if (model == null || string.IsNullOrWhiteSpace(excelPath)) return;
+
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Profile_Settings");
+        ws.Cell(1, 1).Value = "SettingKey";
+        ws.Cell(1, 2).Value = "SettingValue";
+
+        int r = 2;
+        void AddSetting(string key, object? val)
+        {
+            ws.Cell(r, 1).Value = key;
+            ws.Cell(r, 2).Value = val?.ToString() ?? "";
+            r++;
+        }
+
+        AddSetting("profileName", model.ProfileName);
+        AddSetting("description", model.Description);
+        AddSetting("boundaryLayer", model.BoundaryLayer);
+        AddSetting("plotNoTextLayer", model.PlotNoTextLayer);
+        AddSetting("usageTextLayer", model.UsageTextLayer);
+        AddSetting("subParcelLayer", model.SubParcelLayer);
+        AddSetting("roadLayer", model.RoadLayer);
+        AddSetting("dimensionsLayer", model.DimensionsLayer);
+        AddSetting("directionSystem", model.DirectionSystem);
+        AddSetting("passageStreetThresholdMeters", model.PassageStreetThresholdMeters);
+        AddSetting("maxRaySearchDistanceMeters", model.MaxRaySearchDistanceMeters);
+        AddSetting("rayCount", model.RayCount);
+        AddSetting("rayMethod", model.RayMethod);
+        AddSetting("snapToleranceMeters", model.SnapToleranceMeters);
+        AddSetting("mergeChamfers", model.MergeChamfers);
+        AddSetting("chamferThresholdMeters", model.ChamferThresholdMeters);
+        AddSetting("buildPolygonsFromLines", model.BuildPolygonsFromLines);
+        AddSetting("defaultPlanNo", model.DefaultPlanNo);
+        AddSetting("defaultNeighbourhood", model.DefaultNeighbourhood);
+        AddSetting("defaultRequestType", model.DefaultRequestType);
+        AddSetting("defaultReportNo", model.DefaultReportNo);
+        AddSetting("utmEpsg", model.UtmEpsg);
+        AddSetting("useArabicXArabDecoder", model.UseArabicXArabDecoder);
+        AddSetting("reverseArabicText", model.ReverseArabicText);
+        AddSetting("aMinDeg", model.AMinDeg);
+        AddSetting("aMaxDeg", model.AMaxDeg);
+        AddSetting("multiSegmentAngleDeviationDeg", model.MultiSegmentAngleDeviationDeg);
+        AddSetting("includeReflexCorners", model.IncludeReflexCorners);
+        AddSetting("arcCenterToleranceMeters", model.ArcCenterToleranceMeters);
+        AddSetting("arcRadiusToleranceMeters", model.ArcRadiusToleranceMeters);
+        AddSetting("arcTangentToleranceDeg", model.ArcTangentToleranceDeg);
+        AddSetting("clusterLengthMeters", model.ClusterLengthMeters);
+        AddSetting("rule1LengthRatioGuard", model.Rule1LengthRatioGuard);
+        AddSetting("trueNorthCorrection", model.TrueNorthCorrection);
+        AddSetting("continueFromLatestExport", model.ContinueFromLatestExport);
+        AddSetting("maxExportHistoryCount", model.MaxExportHistoryCount);
+        AddSetting("maxCurveExportDeviationMeters", model.MaxCurveExportDeviationMeters);
+        AddSetting("alsoKeepExactUtmGdbWithTrueCurves", model.AlsoKeepExactUtmGdbWithTrueCurves);
+        AddSetting("geometryMode", model.GeometryMode);
+
+        if (model.LayerUsageMap.Count > 0)
+        {
+            var luWs = workbook.Worksheets.Add("Layer_Usages");
+            luWs.Cell(1, 1).Value = "LayerName";
+            luWs.Cell(1, 2).Value = "SelectedUsage";
+            int lr = 2;
+            foreach (var kvp in model.LayerUsageMap)
+            {
+                luWs.Cell(lr, 1).Value = kvp.Key;
+                luWs.Cell(lr, 2).Value = kvp.Value;
+                lr++;
+            }
+        }
+
+        string? dir = Path.GetDirectoryName(excelPath);
+        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+        workbook.SaveAs(excelPath);
     }
 }

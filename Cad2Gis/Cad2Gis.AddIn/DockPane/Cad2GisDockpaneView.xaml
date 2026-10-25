@@ -654,19 +654,20 @@
                                                     Tag="{Binding IsIgnoreTabSelected}">
                                                 <StackPanel Orientation="Horizontal">
                                                     <TextBlock Text="[Ignore Layers] (Ignored)"/>
-                                                    <TextBlock Text="{Binding IgnoreBadge}" FontSize="9.5" Opacity="0.85" Margin="3,0,0,0"/>
+                                                    <TextBlock Text="{Binding IgnoreLayersBadge}" FontSize="9.5" Opacity="0.85" Margin="3,0,0,0"/>
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
                                     </ScrollViewer>
                                 </Border>
 
-                                <!-- Quick Action Toolbar for Layer Selection -->
-                                <Border Grid.Row="1" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,0,0,1" Padding="6,3">
+                                <!-- Toolbar: Quick Actions for Selection -->
+                                <Border Grid.Row="1" Background="#0F172A" Padding="6,4" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
@@ -689,8 +690,12 @@
                                                 ToolTip="تفعيل علامة الصح لكل طبقات هذا القسم"/>
                                         <Button Grid.Column="3" Content="❌ إلغاء الكل"
                                                 Command="{Binding DeselectAllLayersCommand}"
-                                                Style="{StaticResource ActionButton}" Height="23" FontSize="9.5" Background="#334155"
+                                                Style="{StaticResource ActionButton}" Height="23" FontSize="9.5" Background="#334155" Margin="0,0,4,0"
                                                 ToolTip="إلغاء تفعيل طبقات هذا القسم"/>
+                                        <Button Grid.Column="4" Content="🔄 تحديث الاستخدام"
+                                                Command="{Binding RefreshUsageTypesCommand}"
+                                                Style="{StaticResource ActionButton}" Height="23" FontSize="9.5" Background="#0F766E"
+                                                ToolTip="إعادة قراءة وتحديث قائمة أنواع الاستخدام من ورقة Usage Types في ملف الإكسل"/>
                                     </Grid>
                                 </Border>
 
@@ -784,7 +789,7 @@
                                         </DataGridTemplateColumn>
 
                                         <!-- Target Role Mapping ComboBox -->
-                                        <DataGridTemplateColumn Header="Assigned Role" Width="145">
+                                        <DataGridTemplateColumn Header="Assigned Role" Width="135">
                                             <DataGridTemplateColumn.CellTemplate>
                                                 <DataTemplate>
                                                     <ComboBox Style="{StaticResource DarkComboBoxStyle}"
@@ -792,6 +797,19 @@
                                                               SelectedItem="{Binding Role, UpdateSourceTrigger=PropertyChanged}"
                                                               ItemsSource="{Binding DataContext.AvailableLayerRoles, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                               Height="24" Margin="3,1" FontSize="10.5"/>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+
+                                        <!-- Optional USAGE Dropdown (Part C.1) -->
+                                        <DataGridTemplateColumn Header="USAGE" Width="120">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <ComboBox Style="{StaticResource DarkComboBoxStyle}"
+                                                              ItemContainerStyle="{StaticResource DarkComboBoxItemStyle}"
+                                                              SelectedItem="{Binding SelectedUsage, UpdateSourceTrigger=PropertyChanged}"
+                                                              ItemsSource="{Binding DataContext.LayerUsageOptions, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                              Height="24" Margin="3,1" FontSize="10"/>
                                                 </DataTemplate>
                                             </DataGridTemplateColumn.CellTemplate>
                                         </DataGridTemplateColumn>

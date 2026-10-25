@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using Cad2Gis.Core.Services;
+
 namespace Cad2Gis.Core.Models;
 
 /// <summary>
@@ -55,4 +58,8 @@ public class ConsultantProfileModel
     // Geometry Preservation Settings
     public double MaxCurveExportDeviationMeters { get; set; } = 0.001;
     public bool AlsoKeepExactUtmGdbWithTrueCurves { get; set; } = false;
+
+    // Part C: Layer USAGE mapping and Geometry Mode
+    public string GeometryMode { get; set; } = LayerGeometryModeService.ModeLineWithDataLayer;
+    public Dictionary<string, string> LayerUsageMap { get; set; } = new(System.StringComparer.OrdinalIgnoreCase);
 }

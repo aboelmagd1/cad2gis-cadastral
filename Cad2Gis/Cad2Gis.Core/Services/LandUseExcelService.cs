@@ -133,12 +133,12 @@ public class LandUseExcelService
         foreach (var p in parcels)
         {
             string key = ArabicTextNormalizer.Normalize(p.PlotId);
-            bool matched = false;
+            bool matchedExcel = false;
+            LandUseItem? lu = null;
 
-            if (landUseLookup != null && (landUseLookup.TryGetValue(key, out var lu) || landUseLookup.TryGetValue(p.PlotId, out lu)))
+            if (landUseLookup != null && (landUseLookup.TryGetValue(key, out lu) || landUseLookup.TryGetValue(p.PlotId, out lu)))
             {
-                if (!string.IsNullOrWhiteSpace(lu.Usage) && MunicipalLookups.IsOfficialUsageType(lu.Usage))
-                    p.Usage = lu.Usage;
+                matchedExcel = true;
                 if (!string.IsNullOrWhiteSpace(lu.Remarks))
                     p.Remarks = lu.Remarks;
                 if (!string.IsNullOrWhiteSpace(lu.BlockNo))
@@ -148,56 +148,86 @@ public class LandUseExcelService
                 {
                     discrepancies?.Add($"Plot {p.PlotId}: CAD Area ({p.AreaSqm:F2} m²) differs from Excel Area ({lu.AreaSqm.Value:F2} m²) by {Math.Abs(lu.AreaSqm.Value - p.AreaSqm):F2} m².");
                 }
-                matched = true;
             }
 
-            if (!matched)
+            // Clean any legacy provenance string from Remarks
+            if (!string.IsNullOrWhiteSpace(p.Remarks) && p.Remarks.StartsWith("From ", StringComparison.OrdinalIgnoreCase))
             {
-                // Fallback rules when PARCEs_landuse.xlsx has no matching data:
-                // Section 1.2:
-                // SUB Parcel -> UTL (Approved in Usage Types sheet)
-                // MAIN Parcel -> Pending owner decision. Never write PLT!
+                p.Provenance = p.Remarks;
+                p.Remarks = string.Empty;
+            }
+
+            // Precedence for USAGE:
+            // 1. Value entered or edited manually by user
+            if (p.HasUserAssignedUsage && !string.IsNullOrWhiteSpace(p.Usage) && MunicipalLookups.IsOfficialUsageType(p.Usage))
+            {
+                p.UsageSource = "Manual";
+            }
+            // 2. Valid match in PARCEs_landuse.xlsx (Plot is found and its USAGE is in Usage Types)
+            else if (matchedExcel && lu != null && !string.IsNullOrWhiteSpace(lu.Usage) && MunicipalLookups.IsOfficialUsageType(lu.Usage))
+            {
+                p.Usage = lu.Usage;
+                p.UsageSource = "Excel";
+            }
+            // 3. Layer-level USAGE chosen in Step 1 drop-down (or dominant layer in Line with data layer)
+            else if (!string.IsNullOrWhiteSpace(p.LayerUsage) && MunicipalLookups.IsOfficialUsageType(p.LayerUsage))
+            {
+                p.Usage = p.LayerUsage;
+                p.UsageSource = "Layer";
+            }
+            // 4. Fallback rules
+            else
+            {
                 bool isMain = (p.Class == ParcelClass.Main || p.ParcelTyp == 1);
                 if (!isMain)
                 {
                     p.Usage = "UTL";
+                    p.UsageSource = "Fallback";
                 }
                 else
                 {
                     if (mainUsageMode == MainUsageMode.InferFromText)
                     {
-                        string? classified = MunicipalLookups.ClassifyUsageFromText(p.PlotId);
+                        // Classify strictly from UsageText (never from PlotId!)
+                        string? classified = MunicipalLookups.ClassifyUsageFromText(p.UsageText);
                         if (!string.IsNullOrWhiteSpace(classified) && MunicipalLookups.IsOfficialUsageType(classified))
                         {
                             p.Usage = classified;
+                            p.UsageSource = "Fallback";
                         }
                         else
                         {
                             p.Usage = string.Empty;
+                            p.UsageSource = "Fallback";
                             discrepancies?.Add($"Plot {p.PlotId}: MAIN parcel USAGE left empty (pending owner decision, no approved usage type found in text).");
                         }
                     }
                     else
                     {
                         p.Usage = string.Empty;
+                        p.UsageSource = "Fallback";
                     }
                 }
+            }
 
-                // Section 1.3: REMARKS Field
-                // 1. Text chosen by user in Step 1 (p.PlotId) if valid
-                // 2. Otherwise USAGE value (if USAGE is empty, leave REMARKS empty)
-                bool hasChosenText = !string.IsNullOrWhiteSpace(p.PlotId)
-                    && !(p.PlotId.StartsWith("P", StringComparison.OrdinalIgnoreCase) && int.TryParse(p.PlotId.Substring(1), out _))
-                    && !p.PlotId.Equals("MAIN", StringComparison.OrdinalIgnoreCase)
-                    && !p.PlotId.Equals("SUB", StringComparison.OrdinalIgnoreCase);
-
-                if (hasChosenText)
+            // REMARKS Field resolution:
+            // If Remarks is still empty (e.g. no Excel remarks):
+            // 1. UsageText if valid
+            // 2. Otherwise final USAGE code (if USAGE is empty, leave REMARKS empty)
+            // Never use PlotId as REMARKS text!
+            if (string.IsNullOrWhiteSpace(p.Remarks))
+            {
+                if (!string.IsNullOrWhiteSpace(p.UsageText))
                 {
-                    p.Remarks = p.PlotId;
+                    p.Remarks = p.UsageText;
+                }
+                else if (!string.IsNullOrWhiteSpace(p.Usage))
+                {
+                    p.Remarks = p.Usage;
                 }
                 else
                 {
-                    p.Remarks = !string.IsNullOrWhiteSpace(p.Usage) ? p.Usage : string.Empty;
+                    p.Remarks = string.Empty;
                 }
             }
 

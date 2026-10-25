@@ -2356,6 +2356,28 @@ public partial class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contrac
                 LatestExportBannerMessage = "Latest export is available — use it for this step? (أحدث تصدير متاح — هل ترغب باستخدامه لهذه الخطوة؟)";
                 StatusMessage = "تنبيه: أحدث تصدير متاح. يمكنك اختياره يدوياً من خيارات المصدر إذا رغبت في المتابعة منه.";
             }
+            if (!string.IsNullOrWhiteSpace(p.GeometryMode))
+            {
+                SelectedGeometryMode = LayerGeometryModeService.NormalizeMode(p.GeometryMode);
+            }
+            if (p.LayerUsageMap != null && p.LayerUsageMap.Count > 0)
+            {
+                foreach (var cl in CadLayers)
+                {
+                    if (p.LayerUsageMap.TryGetValue(cl.LayerName, out var storedUsage))
+                    {
+                        if (string.IsNullOrWhiteSpace(storedUsage) || MunicipalLookups.IsOfficialUsageType(storedUsage))
+                        {
+                            cl.SelectedUsage = storedUsage;
+                        }
+                        else
+                        {
+                            cl.SelectedUsage = string.Empty;
+                            StatusMessage = $"تحذير: كود الاستخدام '{storedUsage}' للطبقة '{cl.LayerName}' غير معتمد في ورقة Usage Types وتم مسحه.";
+                        }
+                    }
+                }
+            }
             StatusMessage = $"Applied profile settings from '{profileName}.xlsx'.";
         }
     }

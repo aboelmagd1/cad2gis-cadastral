@@ -114,6 +114,9 @@ public static class QaValidationEngine
                 result.AddWarning("Parcel", string.IsNullOrEmpty(p.PlotId) ? p.InternalId.ToString() : p.PlotId, "USAGE", $"Parcel USAGE '{p.Usage}' is not in the approved 'Usage Types' list (RSD, COM, RSC, AGR, IND, UTL).");
             else if (isMain && string.IsNullOrWhiteSpace(p.Usage))
                 result.AddWarning("Parcel", p.PlotId, "USAGE", "MAIN parcel USAGE is empty (pending owner decision or unclassified text).");
+
+            if (!string.IsNullOrWhiteSpace(p.Remarks) && p.Remarks.StartsWith("From ", StringComparison.OrdinalIgnoreCase))
+                result.AddError("Parcel", string.IsNullOrEmpty(p.PlotId) ? p.InternalId.ToString() : p.PlotId, "REMARKS", $"Internal provenance text '{p.Remarks}' must not be stored in REMARKS field.");
         }
 
         // 2. Validate Borders: ONLY MAIN parcels get dimensions (sub-parcels never get dimensions)

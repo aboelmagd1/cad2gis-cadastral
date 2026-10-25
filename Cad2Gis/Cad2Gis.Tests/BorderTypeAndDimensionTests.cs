@@ -19,7 +19,7 @@ public class BorderTypeAndDimensionTests
     [Fact]
     public void Requirement1_MissingOrEmptyExcel_DoesNotFail_FieldsCompletedByRules()
     {
-        var mainParcel = new ParcelRecord { InternalId = 1, Class = ParcelClass.Main, PlotId = "105" };
+        var mainParcel = new ParcelRecord { InternalId = 1, Class = ParcelClass.Main, PlotId = "105", UsageText = "سكني" };
         var subParcel = new ParcelRecord { InternalId = 2, Class = ParcelClass.Sub, PlotId = "P2" };
 
         var parcels = new List<ParcelRecord> { mainParcel, subParcel };
@@ -31,7 +31,8 @@ public class BorderTypeAndDimensionTests
         // Process succeeds without throwing
         Assert.NotNull(mainParcel.Remarks);
         Assert.NotNull(subParcel.Remarks);
-        Assert.Equal("105", mainParcel.Remarks); // Chosen text
+        Assert.Equal("سكني", mainParcel.Remarks); // REMARKS from UsageText, never PlotId
+        Assert.Equal("RSD", mainParcel.Usage);   // Inferred from UsageText
         Assert.Equal("UTL", subParcel.Usage);   // SUB gets UTL
         Assert.Equal("UTL", subParcel.Remarks); // Fallback to USAGE
     }
@@ -60,10 +61,11 @@ public class BorderTypeAndDimensionTests
         LandUseExcelService.EnrichParcels(parcelsSub, null);
         Assert.Equal("UTL", sub.Usage);
 
-        // 3. MAIN parcel with text containing usage ("سكني") -> inferred as RSD
-        var mainRsd = new ParcelRecord { InternalId = 2, Class = ParcelClass.Main, PlotId = "سكني 101" };
+        // 3. MAIN parcel with UsageText containing usage ("سكني") -> inferred as RSD
+        var mainRsd = new ParcelRecord { InternalId = 2, Class = ParcelClass.Main, PlotId = "101", UsageText = "سكني 101" };
         LandUseExcelService.EnrichParcels(new[] { mainRsd }, null, mainUsageMode: MainUsageMode.InferFromText);
         Assert.Equal("RSD", mainRsd.Usage);
+        Assert.Equal("سكني 101", mainRsd.Remarks);
 
         // 4. MAIN parcel with unclassified text ("101") under InferFromText -> leaves USAGE empty
         var mainUnclassified = new ParcelRecord { InternalId = 3, Class = ParcelClass.Main, PlotId = "101" };
@@ -73,7 +75,7 @@ public class BorderTypeAndDimensionTests
         Assert.Contains(disc, d => d.Contains("MAIN parcel USAGE left empty"));
 
         // 5. MAIN parcel under LeaveBlank mode -> leaves USAGE empty
-        var mainBlankMode = new ParcelRecord { InternalId = 4, Class = ParcelClass.Main, PlotId = "تجاري" };
+        var mainBlankMode = new ParcelRecord { InternalId = 4, Class = ParcelClass.Main, PlotId = "102", UsageText = "تجاري" };
         LandUseExcelService.EnrichParcels(new[] { mainBlankMode }, null, mainUsageMode: MainUsageMode.LeaveBlank);
         Assert.Equal(string.Empty, mainBlankMode.Usage);
     }
@@ -85,8 +87,8 @@ public class BorderTypeAndDimensionTests
     [Fact]
     public void Requirement3_Remarks_FromChosenText_ElseFromUsage()
     {
-        // 1. Valid user chosen text from Step 1
-        var p1 = new ParcelRecord { InternalId = 1, Class = ParcelClass.Main, PlotId = "قطعة تجارية 55" };
+        // 1. Valid user chosen text from Step 1 (via UsageText)
+        var p1 = new ParcelRecord { InternalId = 1, Class = ParcelClass.Main, PlotId = "55", UsageText = "قطعة تجارية 55" };
         LandUseExcelService.EnrichParcels(new[] { p1 }, null, mainUsageMode: MainUsageMode.InferFromText);
         Assert.Equal("قطعة تجارية 55", p1.Remarks);
 

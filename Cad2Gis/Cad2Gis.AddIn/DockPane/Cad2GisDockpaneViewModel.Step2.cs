@@ -195,6 +195,7 @@ public partial class Cad2GisDockpaneViewModel
             // B. Build Polygons from Lines (automatically active on Line or Both)
             // Run native ArcGIS Geoprocessing FeatureToPolygon outside QueuedTask to prevent deadlocks!
             var constructedParcelsWithClass = new List<(Polygon Polygon, ParcelClass Class, string GroupName)>();
+            var constructedParcelsWithAttribution = new List<(Polygon Polygon, LayerAttributionResult Attribution)>();
             bool isLineOnlyMode = !LayerGeometryModeService.ShouldIngestPolygons(SelectedGeometryMode);
             FeatureToPolygonReport? f2pReport = null;
 
@@ -209,79 +210,144 @@ public partial class Cad2GisDockpaneViewModel
                     return;
                 }
 
-                // Section 6: Class assignment (MAIN / SUB) without losing the layer name
-                // Run once per class group: Main Parcels tab layers, then Sub-Parcels tab layers.
-                var mainLayers = CadLayers.Where(l => (l.Category == "Main Parcels" || l.Role == LayerRole.Boundary) && l.IsSelected)
-                    .Select(l => l.LayerName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-
-                var subLayers = CadLayers.Where(l => (l.Category == "Sub-Parcels / Utilities" || l.Role == LayerRole.Street) && l.IsSelected)
-                    .Select(l => l.LayerName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-
-                var otherSelected = CadLayers.Where(l => l.IsSelected && l.Category != "Ignore Layers" && l.Category != "Roads & References" && l.Category != "Text & Annotations"
-                    && !mainLayers.Contains(l.LayerName, StringComparer.OrdinalIgnoreCase)
-                    && !subLayers.Contains(l.LayerName, StringComparer.OrdinalIgnoreCase))
-                    .Select(l => l.LayerName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-
-                if (mainLayers.Count == 0 && subLayers.Count == 0 && otherSelected.Count > 0)
+                bool isLineWithDataLayer = LayerGeometryModeService.IsLineWithDataLayer(SelectedGeometryMode);
+                if (isLineWithDataLayer)
                 {
-                    mainLayers.AddRange(otherSelected);
-                }
+                    var allEligibleLayers = CadLayers.Where(l => l.IsSelected && l.Category != "Ignore Layers" && l.Category != "Roads & References" && l.Category != "Text & Annotations")
+                        .Select(l => l.LayerName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
-                var groupRuns = new List<(string GroupName, string OutFcName, ParcelClass Class, List<string> Layers)>();
-                if (mainLayers.Count > 0)
-                    groupRuns.Add(("Main Parcels", "temp_f2p_main", ParcelClass.Main, mainLayers));
-                if (subLayers.Count > 0)
-                    groupRuns.Add(("Sub-Parcels", "temp_f2p_sub", ParcelClass.Sub, subLayers));
+                    if (allEligibleLayers.Count == 0)
+                    {
+                        string err = "الخطوة 2: لم يتم اختيار أي طبقات مؤهلة في الخطوة 1 لبناء المضلعات في نمط الخطوط مع طبقة البيانات.";
+                        StatusMessage = err;
+                        ReportError(err, "خطأ في اختيار الطبقات");
+                        ResetProgress(err, "توقف تحويل الخطوط");
+                        return;
+                    }
 
-                if (groupRuns.Count == 0)
-                {
-                    string err = "الخطوة 2: لم يتم اختيار أي طبقات مؤهلة في الخطوة 1 لبناء المضلعات من الخطوط.";
-                    StatusMessage = err;
-                    ReportError(err, "خطأ في اختيار الطبقات");
-                    ResetProgress(err, "توقف تحويل الخطوط");
-                    return;
-                }
+                    var subLayerNames = new HashSet<string>(
+                        CadLayers.Where(l => l.Category == "Sub-Parcels / Utilities" || l.Role == LayerRole.Street).Select(l => l.LayerName),
+                        StringComparer.OrdinalIgnoreCase);
 
-                foreach (var grp in groupRuns)
-                {
-                    ReportProgress(65, $"الخطوة 2: تحويل خطوط {grp.GroupName} إلى مضلعات (Feature to Polygon)", $"تشغيل أداة Feature to Polygon لمجموعة {grp.GroupName} ({grp.Layers.Count} طبقة)...", phase: "المرحلة 2 من 5");
+                    var layerUsageMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    var layerUsageTextMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var l in CadLayers)
+                    {
+                        if (!string.IsNullOrWhiteSpace(l.SelectedUsage))
+                        {
+                            layerUsageMap[l.LayerName] = l.SelectedUsage;
+                        }
+                        if (!string.IsNullOrWhiteSpace(l.DecodedArabicText))
+                        {
+                            layerUsageTextMap[l.LayerName] = l.DecodedArabicText;
+                        }
+                    }
 
-                    var rep = await GdbFeatureClassService.RunFeatureToPolygonReportAsync(
+                    ReportProgress(65, "الخطوة 2: تحويل الخطوط مع طبقة البيانات (Line with data layer)", $"تشغيل SplitLine و FeatureToPolygon لـ {allEligibleLayers.Count} طبقة...", phase: "المرحلة 2 من 5");
+
+                    var rep = await GdbFeatureClassService.RunLineWithDataLayerReportAsync(
                         GdbPath,
                         "Cad_Dataset",
-                        grp.Layers,
+                        allEligibleLayers,
+                        subLayerNames,
+                        layerUsageMap,
+                        layerUsageTextMap,
                         SnapToleranceMeters,
                         SelectedUtmZone,
-                        grp.OutFcName,
-                        grp.Class);
-
-                    f2pReport = rep;
+                        "Cad_Constructed_Parcels");
 
                     if (!rep.Success)
                     {
-                        string failMsg = $"الخطوة 2: فشل بناء المضلعات لمجموعة {grp.GroupName}:\n{rep.DiagnosticMessage}";
+                        string failMsg = $"الخطوة 2: فشل بناء المضلعات في نمط الخطوط مع طبقة البيانات:\n{rep.DiagnosticMessage}";
                         StatusMessage = failMsg;
-                        ReportError(failMsg, $"فشل تحويل خطوط {grp.GroupName}");
+                        ReportError(failMsg, "فشل تحويل خطوط مع طبقة البيانات");
                         ResetProgress(failMsg, "توقف تحويل الخطوط");
-                        return; // ANY FAILURE IN STEPS 1-3 STOPS THE STEP WITH A CLEAR MESSAGE. NO FALLBACK.
+                        return;
                     }
 
-                    foreach (var (poly, cls) in rep.ConstructedClassParcels)
+                    foreach (var item in rep.ConstructedParcels)
                     {
-                        constructedParcelsWithClass.Add((poly, cls, grp.GroupName));
-                    }
-                    if (!string.IsNullOrWhiteSpace(rep.DiagnosticMessage))
-                    {
-                        ReportProgress(70, $"الخطوة 2: نتيجة {grp.GroupName}", rep.DiagnosticMessage, phase: "المرحلة 2 من 5");
+                        constructedParcelsWithAttribution.Add(item);
                     }
 
-                    // Delete intermediate temporary feature class from GDB immediately
-                    try
+                    ReportProgress(70, "الخطوة 2: نتيجة نمط الخطوط مع طبقة البيانات", rep.DiagnosticMessage, phase: "المرحلة 2 من 5");
+                }
+                else
+                {
+                    // Section 6: Class assignment (MAIN / SUB) without losing the layer name
+                    // Run once per class group: Main Parcels tab layers, then Sub-Parcels tab layers.
+                    var mainLayers = CadLayers.Where(l => (l.Category == "Main Parcels" || l.Role == LayerRole.Boundary) && l.IsSelected)
+                        .Select(l => l.LayerName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+                    var subLayers = CadLayers.Where(l => (l.Category == "Sub-Parcels / Utilities" || l.Role == LayerRole.Street) && l.IsSelected)
+                        .Select(l => l.LayerName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+                    var otherSelected = CadLayers.Where(l => l.IsSelected && l.Category != "Ignore Layers" && l.Category != "Roads & References" && l.Category != "Text & Annotations"
+                        && !mainLayers.Contains(l.LayerName, StringComparer.OrdinalIgnoreCase)
+                        && !subLayers.Contains(l.LayerName, StringComparer.OrdinalIgnoreCase))
+                        .Select(l => l.LayerName).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+                    if (mainLayers.Count == 0 && subLayers.Count == 0 && otherSelected.Count > 0)
                     {
-                        var delArgs = Geoprocessing.MakeValueArray(Path.Combine(GdbPath, grp.OutFcName));
-                        await Geoprocessing.ExecuteToolAsync("management.Delete", delArgs);
+                        mainLayers.AddRange(otherSelected);
                     }
-                    catch { }
+
+                    var groupRuns = new List<(string GroupName, string OutFcName, ParcelClass Class, List<string> Layers)>();
+                    if (mainLayers.Count > 0)
+                        groupRuns.Add(("Main Parcels", "temp_f2p_main", ParcelClass.Main, mainLayers));
+                    if (subLayers.Count > 0)
+                        groupRuns.Add(("Sub-Parcels", "temp_f2p_sub", ParcelClass.Sub, subLayers));
+
+                    if (groupRuns.Count == 0)
+                    {
+                        string err = "الخطوة 2: لم يتم اختيار أي طبقات مؤهلة في الخطوة 1 لبناء المضلعات من الخطوط.";
+                        StatusMessage = err;
+                        ReportError(err, "خطأ في اختيار الطبقات");
+                        ResetProgress(err, "توقف تحويل الخطوط");
+                        return;
+                    }
+
+                    foreach (var grp in groupRuns)
+                    {
+                        ReportProgress(65, $"الخطوة 2: تحويل خطوط {grp.GroupName} إلى مضلعات (Feature to Polygon)", $"تشغيل أداة Feature to Polygon لمجموعة {grp.GroupName} ({grp.Layers.Count} طبقة)...", phase: "المرحلة 2 من 5");
+
+                        var rep = await GdbFeatureClassService.RunFeatureToPolygonReportAsync(
+                            GdbPath,
+                            "Cad_Dataset",
+                            grp.Layers,
+                            SnapToleranceMeters,
+                            SelectedUtmZone,
+                            grp.OutFcName,
+                            grp.Class);
+
+                        f2pReport = rep;
+
+                        if (!rep.Success)
+                        {
+                            string failMsg = $"الخطوة 2: فشل بناء المضلعات لمجموعة {grp.GroupName}:\n{rep.DiagnosticMessage}";
+                            StatusMessage = failMsg;
+                            ReportError(failMsg, $"فشل تحويل خطوط {grp.GroupName}");
+                            ResetProgress(failMsg, "توقف تحويل الخطوط");
+                            return; // ANY FAILURE IN STEPS 1-3 STOPS THE STEP WITH A CLEAR MESSAGE. NO FALLBACK.
+                        }
+
+                        foreach (var (poly, cls) in rep.ConstructedClassParcels)
+                        {
+                            constructedParcelsWithClass.Add((poly, cls, grp.GroupName));
+                        }
+                        if (!string.IsNullOrWhiteSpace(rep.DiagnosticMessage))
+                        {
+                            ReportProgress(70, $"الخطوة 2: نتيجة {grp.GroupName}", rep.DiagnosticMessage, phase: "المرحلة 2 من 5");
+                        }
+
+                        // Delete intermediate temporary feature class from GDB immediately
+                        try
+                        {
+                            var delArgs = Geoprocessing.MakeValueArray(Path.Combine(GdbPath, grp.OutFcName));
+                            await Geoprocessing.ExecuteToolAsync("management.Delete", delArgs);
+                        }
+                        catch { }
+                    }
                 }
             }
 
@@ -377,14 +443,57 @@ public partial class Cad2GisDockpaneViewModel
                                 Class = isMain ? ParcelClass.Main : ParcelClass.Sub,
                                 AreaSqm = metrics.areaSqm,
                                 Usage = lyrInfo?.DecodedArabicText ?? "",
-                                Remarks = $"From Dataset layer [{item.LayerName}]"
+                                UsageText = lyrInfo?.DecodedArabicText ?? "",
+                                Remarks = string.Empty,
+                                Provenance = $"From Dataset layer [{item.LayerName}]"
                             };
                             _parcels.Add(parcel);
                             _parcelGeometries[parcel.InternalId] = cleaned;
                         }
                     }
 
-                    // B. Integrate Polygons Constructed from Lines via FeatureToPolygon
+                    // B.1 Integrate Polygons Constructed in "Line with data layer" mode
+                    if (constructedParcelsWithAttribution.Count > 0)
+                    {
+                        foreach (var (cpPoly, cpAttr) in constructedParcelsWithAttribution)
+                        {
+                            var cleaned = ParcelPolygonizer.Clean2DPlanar(cpPoly);
+                            var metrics = ParcelPolygonizer.ComputeMetrics(cleaned);
+
+                            bool isDuplicate = false;
+                            foreach (var existing in _parcelGeometries.Values)
+                            {
+                                if (Math.Abs(existing.Area - metrics.areaSqm) < 0.5)
+                                {
+                                    var ec = existing.Extent.Center;
+                                    if (Math.Abs(ec.X - metrics.centroid.X) < 0.2 && Math.Abs(ec.Y - metrics.centroid.Y) < 0.2)
+                                    {
+                                        isDuplicate = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (isDuplicate) continue;
+
+                            long newId = _parcels.Count + 1;
+                            var parcel = new ParcelRecord
+                            {
+                                InternalId = newId,
+                                PlotId = $"P{newId}",
+                                Class = cpAttr.AssignedClass,
+                                AreaSqm = metrics.areaSqm,
+                                LayerUsage = cpAttr.AssignedUsage,
+                                Usage = cpAttr.AssignedUsage,
+                                UsageText = !string.IsNullOrWhiteSpace(cpAttr.UsageText) ? cpAttr.UsageText : (cpAttr.AssignedUsage ?? ""),
+                                Remarks = string.Empty,
+                                Provenance = $"Line with data layer: {cpAttr.GetSummary()}"
+                            };
+                            _parcels.Add(parcel);
+                            _parcelGeometries[parcel.InternalId] = cleaned;
+                        }
+                    }
+
+                    // B.2 Integrate Polygons Constructed from Lines via FeatureToPolygon (Regular Lines mode)
                     if (constructedParcelsWithClass.Count > 0)
                     {
                         foreach (var (cpPoly, cpClass, cpGrp) in constructedParcelsWithClass)
@@ -415,7 +524,8 @@ public partial class Cad2GisDockpaneViewModel
                                 Class = cpClass,
                                 AreaSqm = metrics.areaSqm,
                                 Usage = cpClass == ParcelClass.Main ? "قطعة رئيسية" : "خدمات / فرعية",
-                                Remarks = $"From FeatureToPolygon [{cpGrp}]"
+                                Remarks = string.Empty,
+                                Provenance = $"From FeatureToPolygon [{cpGrp}]"
                             };
                             _parcels.Add(parcel);
                             _parcelGeometries[parcel.InternalId] = cleaned;
@@ -471,7 +581,8 @@ public partial class Cad2GisDockpaneViewModel
                                 PlotId = $"P{newId}",
                                 Class = isMain ? ParcelClass.Main : ParcelClass.Sub,
                                 AreaSqm = metrics.areaSqm > 0 ? metrics.areaSqm : ring.Area,
-                                Remarks = ring.WasUsedAsIs 
+                                Remarks = string.Empty,
+                                Provenance = ring.WasUsedAsIs 
                                     ? $"From Closed Polyline [{ring.SourceLayer}]" 
                                     : $"Polygonized from CAD layer [{ring.SourceLayer}]"
                             };
@@ -633,6 +744,7 @@ public partial class Cad2GisDockpaneViewModel
                             if (!string.IsNullOrWhiteSpace(usageAnnot.Text))
                             {
                                 p.Usage = usageAnnot.Text.Trim();
+                                p.UsageText = usageAnnot.Text.Trim();
                             }
                         }
 
@@ -728,7 +840,8 @@ public partial class Cad2GisDockpaneViewModel
                                                 PlotId = !string.IsNullOrWhiteSpace(plotText) ? plotText : $"P{newId}",
                                                 Class = isMain ? ParcelClass.Main : ParcelClass.Sub,
                                                 AreaSqm = metrics.areaSqm,
-                                                Remarks = $"From CAD layer [{layerVal}]"
+                                                Remarks = string.Empty,
+                                                Provenance = $"From CAD layer [{layerVal}]"
                                             };
                                             _parcels.Add(parcel);
                                             _parcelGeometries[parcel.InternalId] = cleaned;
@@ -847,7 +960,8 @@ public partial class Cad2GisDockpaneViewModel
                                 PlotId = $"P{newId}",
                                 Class = isMain ? ParcelClass.Main : ParcelClass.Sub,
                                 AreaSqm = metrics.areaSqm > 0 ? metrics.areaSqm : ring.Area,
-                                Remarks = ring.WasUsedAsIs 
+                                Remarks = string.Empty,
+                                Provenance = ring.WasUsedAsIs 
                                     ? $"From Closed Polyline [{ring.SourceLayer}]" 
                                     : $"Polygonized from CAD layer [{ring.SourceLayer}]"
                             };
