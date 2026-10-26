@@ -554,6 +554,54 @@ public class PerformanceAndReviewFixesTests
     }
 
     [Fact]
+    public void PlotIdExtractor_ProximityFallback_Within1Meter_AndDirectIntersectPriority()
+    {
+        var parcel1 = new ParcelRecord { InternalId = 1, Class = ParcelClass.Main, PlotId = "P1" };
+        var parcel2 = new ParcelRecord { InternalId = 2, Class = ParcelClass.Main, PlotId = "P2" };
+
+        // Parcel 1 has direct intersect annotation "101" inside
+        var insideAnnots = new Dictionary<long, List<(string Text, string LayerName)>>
+        {
+            [1] = new List<(string, string)> { ("101", "PLOT_LAYER") }
+        };
+
+        var parcelCenters = new Dictionary<long, (double CenterX, double CenterY)>
+        {
+            [1] = (10.0, 10.0),
+            [2] = (30.0, 30.0)
+        };
+
+        // All annotations list:
+        // "101" at (10, 10) - inside Parcel 1
+        // "999" at (10.5, 10.5) - close to Parcel 1 (0.7m), but Parcel 1 already matched via intersect
+        // "202" at (30.6, 30.0) - 0.6m from Parcel 2 center (within 1.0m fallback)
+        // "9999" at (50.0, 50.0) - far away (> 1m)
+        var allAnnots = new List<(string Text, double X, double Y, string LayerName)>
+        {
+            ("101", 10.0, 10.0, "PLOT_LAYER"),
+            ("999", 10.5, 10.5, "PLOT_LAYER"),
+            ("202", 30.6, 30.0, "PLOT_LAYER"),
+            ("9999", 50.0, 50.0, "PLOT_LAYER")
+        };
+
+        var report = PlotIdExtractorService.AssignPlotIds(
+            new[] { parcel1, parcel2 },
+            insideAnnots,
+            allAnnots,
+            parcelCenters,
+            explicitPlotLayer: "PLOT_LAYER",
+            maxProximityMeters: 1.0);
+
+        // Parcel 1 takes direct intersect "101", not proximity "999"
+        Assert.Equal("101", parcel1.PlotId);
+        Assert.Equal(1, report.MatchedFromSelectedLayer);
+
+        // Parcel 2 takes proximity within 1.0m "202"
+        Assert.Equal("202", parcel2.PlotId);
+        Assert.Equal(1, report.MatchedViaProximity);
+    }
+
+    [Fact]
     public void Step1_OutputDirectory_CreatedIfMissing()
     {
         string tempRoot = Path.Combine(Path.GetTempPath(), "Cad2Gis_Test_" + Guid.NewGuid().ToString("N"));

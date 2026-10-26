@@ -741,7 +741,7 @@ public partial class Cad2GisDockpaneViewModel
                             .Select(a => (a.Text, a.Location.X, a.Location.Y, a.LayerName))
                             .ToList();
 
-                        // Execute robust PlotIdExtractorService
+                        // Execute robust PlotIdExtractorService (Priority 1: Direct Intersect, Fallback: Proximity <= 1.0m to boundary)
                         var matchReport = PlotIdExtractorService.AssignPlotIds(
                             _parcels,
                             parcelAnnotationsMap,
@@ -750,7 +750,20 @@ public partial class Cad2GisDockpaneViewModel
                             explicitPlotLayer,
                             secondaryPlotLayers,
                             targetUsageLayers,
-                            maxProximityMeters: 20.0);
+                            maxProximityMeters: 1.0,
+                            distanceToParcelFunc: (parcelId, x, y) =>
+                            {
+                                if (_parcelGeometries.TryGetValue(parcelId, out var polyGeom) && polyGeom != null)
+                                {
+                                    var pt = MapPointBuilderEx.CreateMapPoint(x, y, polyGeom.SpatialReference);
+                                    return GeometryEngine.Instance.Distance(polyGeom, pt);
+                                }
+                                if (parcelCenters.TryGetValue(parcelId, out var c))
+                                {
+                                    return Math.Sqrt(Math.Pow(x - c.CenterX, 2) + Math.Pow(y - c.CenterY, 2));
+                                }
+                                return double.MaxValue;
+                            });
 
                         System.Diagnostics.Debug.WriteLine($"[Audit Log] {matchReport.GetSummary()}");
 

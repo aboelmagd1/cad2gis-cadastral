@@ -84,7 +84,8 @@ public static class PlotIdExtractorService
         string? explicitPlotLayer,
         ISet<string>? secondaryPlotLayers = null,
         ISet<string>? usageLayers = null,
-        double maxProximityMeters = 20.0)
+        double maxProximityMeters = 1.0,
+        Func<long, double, double, double>? distanceToParcelFunc = null)
     {
         var report = new PlotIdMatchReport
         {
@@ -211,7 +212,9 @@ public static class PlotIdExtractorService
                             .Select(a => new
                             {
                                 Text = a.Text.Trim(),
-                                Dist = Math.Sqrt(Math.Pow(a.X - center.CenterX, 2) + Math.Pow(a.Y - center.CenterY, 2))
+                                Dist = distanceToParcelFunc != null
+                                    ? distanceToParcelFunc(p.InternalId, a.X, a.Y)
+                                    : Math.Sqrt(Math.Pow(a.X - center.CenterX, 2) + Math.Pow(a.Y - center.CenterY, 2))
                             })
                             .Where(x => x.Dist <= maxProximityMeters)
                             .OrderBy(x => x.Dist)
@@ -248,7 +251,9 @@ public static class PlotIdExtractorService
                             .Select(a => new
                             {
                                 Text = a.Text.Trim(),
-                                Dist = Math.Sqrt(Math.Pow(a.X - center.CenterX, 2) + Math.Pow(a.Y - center.CenterY, 2))
+                                Dist = distanceToParcelFunc != null
+                                    ? distanceToParcelFunc(p.InternalId, a.X, a.Y)
+                                    : Math.Sqrt(Math.Pow(a.X - center.CenterX, 2) + Math.Pow(a.Y - center.CenterY, 2))
                             })
                             .Where(x => x.Dist <= maxProximityMeters)
                             .OrderBy(x => x.Dist)
