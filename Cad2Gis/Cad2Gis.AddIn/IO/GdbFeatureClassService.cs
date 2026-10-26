@@ -26,9 +26,14 @@ public static class GdbFeatureClassService
         {
             if (customOutputFolder.EndsWith(".gdb", StringComparison.OrdinalIgnoreCase))
             {
+                string? parent = Path.GetDirectoryName(customOutputFolder);
+                if (!string.IsNullOrWhiteSpace(parent) && !Directory.Exists(parent))
+                {
+                    try { Directory.CreateDirectory(parent); } catch { }
+                }
                 return customOutputFolder;
             }
-            Directory.CreateDirectory(customOutputFolder);
+            try { Directory.CreateDirectory(customOutputFolder); } catch { }
             return Path.Combine(customOutputFolder, "Cad2Gis_Workspace.gdb");
         }
 
@@ -66,6 +71,10 @@ public static class GdbFeatureClassService
         if (Directory.Exists(gdbPath)) return;
 
         string folder = Path.GetDirectoryName(gdbPath)!;
+        if (!string.IsNullOrWhiteSpace(folder) && !Directory.Exists(folder))
+        {
+            try { Directory.CreateDirectory(folder); } catch { }
+        }
         string gdbName = Path.GetFileName(gdbPath);
 
         var args = Geoprocessing.MakeValueArray(folder, gdbName);
@@ -1104,9 +1113,11 @@ public static class GdbFeatureClassService
                 CityId = GetFieldSafe(row, def, "CITY_ID")?.ToString() ?? string.Empty,
                 Address = GetFieldSafe(row, def, "ADDRESS")?.ToString() ?? string.Empty,
                 Usage = GetFieldSafe(row, def, "USAGE")?.ToString() ?? string.Empty,
+                LayerUsage = GetFieldSafe(row, def, "USAGE")?.ToString() ?? string.Empty,
                 IsBuilding = Convert.ToInt32(GetFieldSafe(row, def, "ISBUILDING") ?? 0),
                 BuildingType = Convert.ToInt32(GetFieldSafe(row, def, "BUILDINGTY") ?? 1),
                 Remarks = GetFieldSafe(row, def, "REMARKS")?.ToString() ?? string.Empty,
+                UsageText = GetFieldSafe(row, def, "REMARKS")?.ToString() ?? string.Empty,
                 Layout = GetFieldSafe(row, def, "LAYOUT")?.ToString(),
                 PlotId = GetFieldSafe(row, def, "PLOT_ID")?.ToString() ?? string.Empty,
                 BlockNo = GetFieldSafe(row, def, "BLOCK_NO")?.ToString(),
@@ -1360,9 +1371,11 @@ public static class GdbFeatureClassService
                     CityId = GetFieldSafe(row, def, "CITY_ID")?.ToString() ?? string.Empty,
                     Address = GetFieldSafe(row, def, "ADDRESS")?.ToString() ?? string.Empty,
                     Usage = GetFieldSafe(row, def, "USAGE")?.ToString() ?? string.Empty,
+                    LayerUsage = GetFieldSafe(row, def, "USAGE")?.ToString() ?? string.Empty,
                     IsBuilding = Convert.ToInt32(GetFieldSafe(row, def, "ISBUILDING") ?? 0),
                     BuildingType = Convert.ToInt32(GetFieldSafe(row, def, "BUILDINGTY") ?? 1),
                     Remarks = GetFieldSafe(row, def, "REMARKS")?.ToString() ?? string.Empty,
+                    UsageText = GetFieldSafe(row, def, "REMARKS")?.ToString() ?? string.Empty,
                     Layout = GetFieldSafe(row, def, "LAYOUT")?.ToString(),
                     PlotId = GetFieldSafe(row, def, "PLOT_ID")?.ToString() ?? string.Empty,
                     BlockNo = GetFieldSafe(row, def, "BLOCK_NO")?.ToString(),

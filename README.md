@@ -3,7 +3,9 @@
 
 [![ArcGIS Pro](https://img.shields.io/badge/ArcGIS%20Pro-3.x-blue.svg)](https://pro.arcgis.com/)
 [![.NET](https://img.shields.io/badge/.NET-8.0-purple.svg)](https://dotnet.microsoft.com/)
-[![Tests](https://img.shields.io/badge/Tests-225%20Passed-brightgreen.svg)]()
+[![ArcGIS Pro](https://img.shields.io/badge/ArcGIS%20Pro-3.x-blue.svg)](https://pro.arcgis.com/)
+[![.NET](https://img.shields.io/badge/.NET-8.0-purple.svg)](https://dotnet.microsoft.com/)
+[![Tests](https://img.shields.io/badge/Tests-229%20Passed-brightgreen.svg)]()
 [![Platform](https://img.shields.io/badge/Platform-Windows%20x64-lightgrey.svg)]()
 
 ---
@@ -27,21 +29,35 @@ flowchart LR
 ```
 
 ### 1️⃣ الخطوة الأولى: فحص ومطابقة طبقات الكاد (Scan & Layer Matching)
-- قراءة طبقات الرسم الفعلية من ملف الكاد وتصنيفها آلياً حسب أدوارها (`Boundary`, `PlotText`, `UsageText`, `Roads`, `Ignore`).
-- دعم المطابقة المسبقة عبر ملف إكسل الطبقات المتوقعة (`Expected Layers Excel`) وفق بروفايلات المكاتب الاستشارية.
-- اختيار مخصص لطبقة أرقام القطع (`PlotText`) مع تزامن كامل وحفظ للاختيارات عند تحويل الكاد إلى Dataset (`CADToGeodatabase`).
-- دعم أوضاع هندسية متعددة للطبقات: مضلعات مغلقة، خطوط، أو **"Line with data layer (خطوط مع طبقة البيانات)"**.
+- **إنشاء مجلد المخرجات تلقائياً:** التحقق التلقائي من وجود مجلد `Export_Output` وإنشاؤه فورياً في حال عدم وجوده لمنع أي توقف لأدوات التحويل.
+- **فهرسة وتصنيف الطبقات:** قراءة طبقات الرسم الفعلية من ملف الكاد وتصنيفها آلياً حسب أدوارها (`Boundary`, `PlotText`, `UsageText`, `Roads`, `Ignore`).
+- **تحديد طبقة أرقام القطع (`PlotText`):** إمكانية اختيار طبقة أرقام القطع من القائمة المنسدلة أو تحديدها في الجدول.
+- **تحديد طبقات نصوص الاستخدام (`UsageText`):** دعم تحديد أكثر من طبقة في الكاد لاستخدامها كنصوص للأنشطة والاستعمالات.
+- **تحديد استعمال الطبقة (`USAGE`):** إضافة قائمة منسدلة اختيارية لكل طبقة لتحديد كود الاستخدام المعتمد (`RSD`, `COM`, `RSC`, `AGR`, `IND`, `UTL`) مقروءاً ومحدثاً مباشرة من جدول `Usage Types`.
+- **دعم أوضاع هندسية متعددة للطبقات:**
+  - مضلعات كاد مغلقة (`Polygon`).
+  - خطوط (`Line`).
+  - **خطوط مع طبقة البيانات (`Line with data layer`):** بناء المضلعات وحساب الطبقة السائدة (Dominant Layer) طولياً لكل قطعة وتوريث استعمالها وتصنيفها.
 
 ### 2️⃣ الخطوة الثانية: بناء المضلعات واستخراج أرقام القطع (Extract Parcels)
-- بناء مضلعات القطع مع الحفاظ على الأقواس والمنحنيات الطبيعية بدون تكسير (`Curve-preserving ring assembly`).
-- تنظيف هندسي ثنائي الأبعاد مستوٍ (`Clean2DPlanar`) للتخلص من التشوهات وفروق المناسيب.
-- استخراج أرقام القطع عبر محرك المطابقة المكانية [`PlotIdExtractorService`](file:///d:/workking%20on/shafik/create%20tool%2002/Cad2Gis/Cad2Gis.Core/Services/PlotIdExtractorService.cs) مع أولوية مطلقة للطبقة المختارة وبحث جواري ذكي (Proximity Matching within 20m).
+- **بناء مضلعات القطع:** مع الحفاظ على الأقواس والمنحنيات الطبيعية بدون تكسير (`Curve-preserving ring assembly`).
+- **تنظيف هندسي ثنائي الأبعاد مستوٍ (`Clean2DPlanar`):** للتخلص من التشوهات وفروق المناسيب وZ/M.
+- **استخراج `PLOT_ID` بالربط المكاني (Spatial Join):**
+  - ربط مكاني لنصوص طبقة `PlotText` المختارة في الخطوة الأولى الواقعة داخل حدود كل مضلع.
+  - دعم بحث جواري ذكي (Proximity Matching حتى 20 متراً) للقطع ذات الأرقام الخارجية أو المحاذية للحدود.
+- **تحديد `USAGE` من تصنيف الطبقة:**
+  - في نمط `Polygon`: أخذ الاستخدام مباشرة من تصنيف الطبقة المحددة في الخطوة الأولى (`SelectedUsage` أو الكلمات الدلالية أو `UTL` للخدمات).
+  - في نمط `Line with data layer`: أخذ الاستخدام من الطبقة السائدة للحدود المجمعة عبر محرك [`DominantLayerMatcher`](file:///d:/workking%20on/shafik/create%20tool%2002/Cad2Gis/Cad2Gis.Core/Services/DominantLayerMatcher.cs).
+- **استخراج `REMARKS` بالربط المكاني (Spatial Join):**
+  - أخذ الملاحظات ونصوص الأنشطة مكانياً من الطبقة (أو الطبقات المتعددة) المختارة كـ `UsageText` في الخطوة الأولى الواقعة داخل المضلع.
 - إنتاج طبقة القطع الأساسية: `Cad_Constructed_Parcels`.
 
 ### 3️⃣ الخطوة الثالثة: مطابقة المخطط واستخدامات الأراضي (Apply Schema & Land Use)
-- ربط بيانات القطع مع جداول إكسل الخارجية بناءً على `PLOT_ID`.
-- تصنيف كود الاستخدام (`USAGE`) والملاحظات (`REMARKS`) وفق 4 مستويات أسبقية محكمة:
-  $$\text{Manual Override} > \text{Excel Table} > \text{CAD Layer Usage} > \text{Fallback Default}$$
+- **الأولوية المطلقة لملف الإكسل:**
+  - في حال توفر ملف إكسل استخدامات الأراضي (`PARCEs_landuse.xlsx` أو بيانات مخصصة) ووجود تطابق مع `PLOT_ID`:
+    $$\text{Excel USAGE} \gg \text{CAD Layer USAGE}$$
+    $$\text{Excel REMARKS} \gg \text{CAD Spatial Join REMARKS}$$
+  - في حال عدم وجود ملف إكسل أو عدم تطابق القطعة: يتم الحفاظ التام والكامل على قيم `USAGE` المشتقة من تصنيف طبقات الكاد، وقيم `REMARKS` المشتقة من نصوص طبقات `UsageText`.
 - تطبيق سياسة الحقول الإلزامية والبيانات المفقودة (`MissingDataPolicy`).
 - مقارنة واعتماد المساحات مع إكسل المساحات المعتمد بنسب تفاوت محددة.
 - إنتاج طبقة المخطط المعتمد: `PARCEL_Approved_Schema`.

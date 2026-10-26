@@ -233,10 +233,28 @@ public partial class Cad2GisDockpaneViewModel
                     var layerUsageTextMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                     foreach (var l in CadLayers)
                     {
-                        if (!string.IsNullOrWhiteSpace(l.SelectedUsage))
+                        string? uCode = !string.IsNullOrWhiteSpace(l.SelectedUsage)
+                            ? MunicipalLookups.ExtractUsageCode(l.SelectedUsage) ?? l.SelectedUsage.Trim()
+                            : null;
+
+                        if (string.IsNullOrWhiteSpace(uCode))
                         {
-                            layerUsageMap[l.LayerName] = l.SelectedUsage;
+                            if (subLayerNames.Contains(l.LayerName))
+                            {
+                                uCode = "UTL";
+                            }
+                            else
+                            {
+                                uCode = MunicipalLookups.ClassifyUsageFromText(l.LayerName) ??
+                                        MunicipalLookups.ClassifyUsageFromText(l.DecodedArabicText);
+                            }
                         }
+
+                        if (!string.IsNullOrWhiteSpace(uCode) && MunicipalLookups.IsOfficialUsageType(uCode))
+                        {
+                            layerUsageMap[l.LayerName] = uCode;
+                        }
+
                         if (!string.IsNullOrWhiteSpace(l.DecodedArabicText))
                         {
                             layerUsageTextMap[l.LayerName] = l.DecodedArabicText;
@@ -432,6 +450,25 @@ public partial class Cad2GisDockpaneViewModel
                             var lyrInfo = eligibleLayers.FirstOrDefault(el => el.LayerName.Equals(item.LayerName, StringComparison.OrdinalIgnoreCase));
                             bool isMain = lyrInfo == null || lyrInfo.Category == "Main Parcels" || lyrInfo.Role == LayerRole.Boundary;
 
+                            string layerUsageCode = "";
+                            if (lyrInfo != null && !string.IsNullOrWhiteSpace(lyrInfo.SelectedUsage))
+                            {
+                                layerUsageCode = MunicipalLookups.ExtractUsageCode(lyrInfo.SelectedUsage) ?? lyrInfo.SelectedUsage.Trim();
+                            }
+                            else if (!isMain)
+                            {
+                                layerUsageCode = "UTL";
+                            }
+                            else if (lyrInfo != null)
+                            {
+                                string? candidate = MunicipalLookups.ClassifyUsageFromText(lyrInfo.LayerName) ??
+                                                    MunicipalLookups.ClassifyUsageFromText(lyrInfo.DecodedArabicText);
+                                if (!string.IsNullOrWhiteSpace(candidate) && MunicipalLookups.IsOfficialUsageType(candidate))
+                                {
+                                    layerUsageCode = candidate;
+                                }
+                            }
+
                             string plotText = item.RawText;
                             long newId = _parcels.Count + 1;
                             string initialPlotId = !string.IsNullOrWhiteSpace(plotText) ? plotText : $"P{newId}";
@@ -442,7 +479,8 @@ public partial class Cad2GisDockpaneViewModel
                                 PlotId = initialPlotId,
                                 Class = isMain ? ParcelClass.Main : ParcelClass.Sub,
                                 AreaSqm = metrics.areaSqm,
-                                Usage = lyrInfo?.DecodedArabicText ?? "",
+                                LayerUsage = layerUsageCode,
+                                Usage = layerUsageCode,
                                 UsageText = lyrInfo?.DecodedArabicText ?? "",
                                 Remarks = string.Empty,
                                 Provenance = $"From Dataset layer [{item.LayerName}]"
@@ -700,7 +738,8 @@ public partial class Cad2GisDockpaneViewModel
                         // Flatten all annotations
                         var allAnnotsFlattened = datasetFeatures.Annotations
                             .Where(a => a.Location != null && !string.IsNullOrWhiteSpace(a.Text))
-                            .Select(a => (a.Text, a.Location.X, a.Location.Y, a.LayerName));
+                            .Select(a => (a.Text, a.Location.X, a.Location.Y, a.LayerName))
+                            .ToList();
 
                         // Execute robust PlotIdExtractorService
                         var matchReport = PlotIdExtractorService.AssignPlotIds(
@@ -715,20 +754,53 @@ public partial class Cad2GisDockpaneViewModel
 
                         System.Diagnostics.Debug.WriteLine($"[Audit Log] {matchReport.GetSummary()}");
 
-                        // Assign UsageText / Usage from annotations map
+                        // Assign UsageText / Remarks from annotations map (Spatial Join)
                         foreach (var p in _parcels)
                         {
+                            p.PlotNo1 = p.PlotId;
+
                             if (parcelAnnotationsMap.TryGetValue(p.InternalId, out var insideAnnots) && insideAnnots.Count > 0)
                             {
-                                var usageAnnot = insideAnnots.FirstOrDefault(a =>
-                                    targetUsageLayers.Contains(a.LayerName) ||
-                                    CadExtractionService.InferRoleFromName(a.LayerName) == LayerRole.UsageText ||
-                                    PlotIdExtractorService.IsUsageText(a.Text));
+                                // Gather all annotations from the user's chosen UsageText layer(s)
+                                var usageTextsInside = insideAnnots
+                                    .Where(a => targetUsageLayers.Contains(a.LayerName))
+                                    .Select(a => a.Text.Trim())
+                                    .Where(t => !string.IsNullOrWhiteSpace(t) && !PlotIdExtractorService.IsPlotNumberText(t))
+                                    .Distinct()
+                                    .ToList();
 
-                                if (!string.IsNullOrWhiteSpace(usageAnnot.Text))
+                                if (usageTextsInside.Count == 0 && targetUsageLayers.Count == 0)
                                 {
-                                    p.Usage = usageAnnot.Text.Trim();
-                                    p.UsageText = usageAnnot.Text.Trim();
+                                    usageTextsInside = insideAnnots
+                                        .Where(a => CadExtractionService.InferRoleFromName(a.LayerName) == LayerRole.UsageText || PlotIdExtractorService.IsUsageText(a.Text))
+                                        .Select(a => a.Text.Trim())
+                                        .Where(t => !string.IsNullOrWhiteSpace(t) && !PlotIdExtractorService.IsPlotNumberText(t))
+                                        .Distinct()
+                                        .ToList();
+                                }
+
+                                if (usageTextsInside.Count > 0)
+                                {
+                                    string combinedUsageText = string.Join(" - ", usageTextsInside);
+                                    p.UsageText = combinedUsageText;
+                                    p.Remarks = combinedUsageText; // REMARKS takes data from the layer(s) chosen as UsageText via spatial join!
+                                }
+                            }
+
+                            // Proximity fallback for REMARKS if no annotation fell strictly inside
+                            if (string.IsNullOrWhiteSpace(p.Remarks) && targetUsageLayers.Count > 0 && parcelCenters.TryGetValue(p.InternalId, out var center))
+                            {
+                                var nearestUsage = allAnnotsFlattened
+                                    .Where(a => targetUsageLayers.Contains(a.LayerName) && !PlotIdExtractorService.IsPlotNumberText(a.Text))
+                                    .Select(a => new { a.Text, Distance = Math.Sqrt(Math.Pow(a.X - center.CenterX, 2) + Math.Pow(a.Y - center.CenterY, 2)) })
+                                    .Where(x => x.Distance <= 15.0)
+                                    .OrderBy(x => x.Distance)
+                                    .FirstOrDefault();
+
+                                if (nearestUsage != null && !string.IsNullOrWhiteSpace(nearestUsage.Text))
+                                {
+                                    p.UsageText = nearestUsage.Text.Trim();
+                                    p.Remarks = nearestUsage.Text.Trim();
                                 }
                             }
                         }

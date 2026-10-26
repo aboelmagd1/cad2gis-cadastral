@@ -111,6 +111,28 @@ public static class MunicipalLookups
     public static bool IsOfficialUsageType(string? code) =>
         !string.IsNullOrWhiteSpace(code) && OfficialUsageTypes.ContainsKey(code.Trim());
 
+    public static string? ExtractUsageCode(string? labelOrCode)
+    {
+        if (string.IsNullOrWhiteSpace(labelOrCode)) return null;
+        string trimmed = labelOrCode.Trim();
+        if (IsOfficialUsageType(trimmed)) return trimmed.ToUpperInvariant();
+
+        int dashIdx = trimmed.IndexOfAny(new[] { '—', '-', ' ', ':', '/' });
+        if (dashIdx > 0)
+        {
+            string prefix = trimmed.Substring(0, dashIdx).Trim();
+            if (IsOfficialUsageType(prefix)) return prefix.ToUpperInvariant();
+        }
+
+        foreach (var kvp in OfficialUsageTypes)
+        {
+            if (trimmed.StartsWith(kvp.Key, StringComparison.OrdinalIgnoreCase))
+                return kvp.Key;
+        }
+
+        return null;
+    }
+
     // Standard Land Use Types and default Remarks
     public static readonly Dictionary<string, string> UsageToRemarks = new(StringComparer.OrdinalIgnoreCase)
     {

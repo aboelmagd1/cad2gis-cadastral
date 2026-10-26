@@ -154,6 +154,10 @@ public partial class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contrac
         }
 
         OutputDirectory = Path.Combine(baseDir, "Export_Output");
+        if (!Directory.Exists(OutputDirectory))
+        {
+            try { Directory.CreateDirectory(OutputDirectory); } catch { }
+        }
         GdbPath = GdbFeatureClassService.GetEffectiveGdbPath(OutputDirectory);
 
         // Subscribe to ProjectOpenedEvent to automatically adapt when a project is opened in Pro
@@ -790,6 +794,10 @@ public partial class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contrac
         {
             if (SetProperty(ref _outputDirectory, value))
             {
+                if (!string.IsNullOrWhiteSpace(value) && !Directory.Exists(value))
+                {
+                    try { Directory.CreateDirectory(value); } catch { }
+                }
                 if (string.IsNullOrWhiteSpace(_gdbPath) || _gdbPath.EndsWith("Cad2Gis_Workspace.gdb", StringComparison.OrdinalIgnoreCase))
                 {
                     GdbPath = GdbFeatureClassService.GetEffectiveGdbPath(value);

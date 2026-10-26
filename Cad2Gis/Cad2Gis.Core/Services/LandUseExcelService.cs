@@ -163,16 +163,21 @@ public class LandUseExcelService
             {
                 p.UsageSource = "Manual";
             }
-            // 2. Valid match in PARCEs_landuse.xlsx (Plot is found and its USAGE is in Usage Types)
+            // 2. Valid match in Excel (PARCEs_landuse.xlsx) - EXCEL HAS FIRST PRIORITY
             else if (matchedExcel && lu != null && !string.IsNullOrWhiteSpace(lu.Usage) && MunicipalLookups.IsOfficialUsageType(lu.Usage))
             {
                 p.Usage = lu.Usage;
                 p.UsageSource = "Excel";
             }
-            // 3. Layer-level USAGE chosen in Step 1 drop-down (or dominant layer in Line with data layer)
-            else if (!string.IsNullOrWhiteSpace(p.LayerUsage) && MunicipalLookups.IsOfficialUsageType(p.LayerUsage))
+            // 3. Layer-level USAGE chosen in Step 1 drop-down (Polygon layer or dominant layer in Line with data layer)
+            else if (!string.IsNullOrWhiteSpace(p.LayerUsage) && MunicipalLookups.IsOfficialUsageType(MunicipalLookups.ExtractUsageCode(p.LayerUsage) ?? p.LayerUsage))
             {
-                p.Usage = p.LayerUsage;
+                p.Usage = MunicipalLookups.ExtractUsageCode(p.LayerUsage) ?? p.LayerUsage;
+                p.UsageSource = "Layer";
+            }
+            else if (!string.IsNullOrWhiteSpace(p.Usage) && MunicipalLookups.IsOfficialUsageType(MunicipalLookups.ExtractUsageCode(p.Usage) ?? p.Usage))
+            {
+                p.Usage = MunicipalLookups.ExtractUsageCode(p.Usage) ?? p.Usage;
                 p.UsageSource = "Layer";
             }
             // 4. Fallback rules
@@ -188,8 +193,9 @@ public class LandUseExcelService
                 {
                     if (mainUsageMode == MainUsageMode.InferFromText)
                     {
-                        // Classify strictly from UsageText (never from PlotId!)
-                        string? classified = MunicipalLookups.ClassifyUsageFromText(p.UsageText);
+                        // Classify strictly from UsageText or Remarks (never from PlotId!)
+                        string? textToClassify = !string.IsNullOrWhiteSpace(p.UsageText) ? p.UsageText : p.Remarks;
+                        string? classified = MunicipalLookups.ClassifyUsageFromText(textToClassify);
                         if (!string.IsNullOrWhiteSpace(classified) && MunicipalLookups.IsOfficialUsageType(classified))
                         {
                             p.Usage = classified;
@@ -211,11 +217,13 @@ public class LandUseExcelService
             }
 
             // REMARKS Field resolution:
-            // If Remarks is still empty (e.g. no Excel remarks):
-            // 1. UsageText if valid
-            // 2. Otherwise final USAGE code (if USAGE is empty, leave REMARKS empty)
-            // Never use PlotId as REMARKS text!
-            if (string.IsNullOrWhiteSpace(p.Remarks))
+            // 1. Excel (PARCEs_landuse.xlsx) has priority if matched and contains remarks
+            if (matchedExcel && lu != null && !string.IsNullOrWhiteSpace(lu.Remarks))
+            {
+                p.Remarks = lu.Remarks;
+            }
+            // 2. Otherwise retain CAD UsageText layer(s) text assigned via spatial join from Step 2
+            else if (string.IsNullOrWhiteSpace(p.Remarks))
             {
                 if (!string.IsNullOrWhiteSpace(p.UsageText))
                 {

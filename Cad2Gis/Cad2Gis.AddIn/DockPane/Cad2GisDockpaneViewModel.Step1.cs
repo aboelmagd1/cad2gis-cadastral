@@ -41,6 +41,21 @@ public partial class Cad2GisDockpaneViewModel
 
         try
         {
+            // Ensure Export_Output directory exists!
+            if (string.IsNullOrWhiteSpace(OutputDirectory))
+            {
+                string baseDir = ArcGIS.Desktop.Core.Project.Current?.HomeFolderPath ?? ResolveBaseFolder();
+                OutputDirectory = Path.Combine(baseDir, "Export_Output");
+            }
+            if (!Directory.Exists(OutputDirectory))
+            {
+                try { Directory.CreateDirectory(OutputDirectory); } catch { }
+            }
+            if (string.IsNullOrWhiteSpace(GdbPath) || !GdbPath.Contains(".gdb", StringComparison.OrdinalIgnoreCase))
+            {
+                GdbPath = GdbFeatureClassService.GetEffectiveGdbPath(OutputDirectory);
+            }
+
             // 0. Convert CAD to Geodatabase Feature Dataset using the user-chosen coordinate system
             if (!string.IsNullOrWhiteSpace(CadDrawingPath) && File.Exists(CadDrawingPath))
             {

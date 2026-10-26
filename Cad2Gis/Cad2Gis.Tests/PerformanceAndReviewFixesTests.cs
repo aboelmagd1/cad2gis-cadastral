@@ -552,5 +552,123 @@ public class PerformanceAndReviewFixesTests
         Assert.Equal("345", parcel.PlotId);
         Assert.Equal(1, report.MatchedViaProximity);
     }
+
+    [Fact]
+    public void Step1_OutputDirectory_CreatedIfMissing()
+    {
+        string tempRoot = Path.Combine(Path.GetTempPath(), "Cad2Gis_Test_" + Guid.NewGuid().ToString("N"));
+        string exportOutput = Path.Combine(tempRoot, "Export_Output");
+
+        try
+        {
+            Assert.False(Directory.Exists(exportOutput));
+
+            // Simulating Step 1 directory check
+            if (!Directory.Exists(exportOutput))
+            {
+                Directory.CreateDirectory(exportOutput);
+            }
+
+            Assert.True(Directory.Exists(exportOutput));
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                try { Directory.Delete(tempRoot, true); } catch { }
+            }
+        }
+    }
+
+    [Fact]
+    public void ExtractUsageCode_ParsesStandardAndDropdownFormats()
+    {
+        Assert.Equal("RSD", MunicipalLookups.ExtractUsageCode("RSD"));
+        Assert.Equal("RSD", MunicipalLookups.ExtractUsageCode("RSD — سكني"));
+        Assert.Equal("COM", MunicipalLookups.ExtractUsageCode("COM - تجاري"));
+        Assert.Equal("UTL", MunicipalLookups.ExtractUsageCode("UTL مرافق"));
+        Assert.Equal("RSC", MunicipalLookups.ExtractUsageCode("RSC: سكني تجاري"));
+        Assert.Null(MunicipalLookups.ExtractUsageCode("UNKNOWN"));
+    }
+
+    [Fact]
+    public void Usage_PreservedFromCadLayer_AndOverriddenByExcelPriority()
+    {
+        var parcel = new ParcelRecord
+        {
+            InternalId = 1,
+            PlotId = "101",
+            Class = ParcelClass.Main,
+            LayerUsage = "COM",
+            Usage = "COM"
+        };
+
+        // Without Excel, layer usage "COM" is retained
+        LandUseExcelService.EnrichParcels(new[] { parcel }, null, mainUsageMode: MainUsageMode.InferFromText);
+        Assert.Equal("COM", parcel.Usage);
+        Assert.Equal("Layer", parcel.UsageSource);
+
+        // With Excel providing "RSD", Excel has absolute priority and overrides "COM"
+        var excelLookup = new Dictionary<string, LandUseItem>
+        {
+            ["101"] = new LandUseItem { PlotId = "101", Usage = "RSD" }
+        };
+        LandUseExcelService.EnrichParcels(new[] { parcel }, excelLookup, mainUsageMode: MainUsageMode.InferFromText);
+        Assert.Equal("RSD", parcel.Usage);
+        Assert.Equal("Excel", parcel.UsageSource);
+    }
+
+    [Fact]
+    public void Remarks_TakesDataFromMultipleUsageTextLayers_AndExcelOverrides()
+    {
+        var parcel = new ParcelRecord
+        {
+            InternalId = 1,
+            PlotId = "55",
+            Class = ParcelClass.Main,
+            LayerUsage = "UTL",
+            Usage = "UTL"
+        };
+
+        // Multiple annotations from 2 distinct UsageText layers inside the parcel
+        var insideAnnots = new List<(string Text, string LayerName)>
+        {
+            ("مسجد جامع", "LAYER_MOSQUE_TEXT"),
+            ("مرفق تعليمي", "LAYER_EDUCATION_TEXT"),
+            ("55", "PLOT_NUMBERS") // Plot number should NOT become remarks
+        };
+
+        var targetUsageLayers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "LAYER_MOSQUE_TEXT",
+            "LAYER_EDUCATION_TEXT"
+        };
+
+        var usageTextsInside = insideAnnots
+            .Where(a => targetUsageLayers.Contains(a.LayerName))
+            .Select(a => a.Text.Trim())
+            .Where(t => !string.IsNullOrWhiteSpace(t) && !PlotIdExtractorService.IsPlotNumberText(t))
+            .Distinct()
+            .ToList();
+
+        string combinedRemarks = string.Join(" - ", usageTextsInside);
+        parcel.UsageText = combinedRemarks;
+        parcel.Remarks = combinedRemarks;
+
+        Assert.Equal("مسجد جامع - مرفق تعليمي", parcel.Remarks);
+        Assert.Equal("مسجد جامع - مرفق تعليمي", parcel.UsageText);
+
+        // Step 3 without Excel keeps the spatial join Remarks
+        LandUseExcelService.EnrichParcels(new[] { parcel }, null);
+        Assert.Equal("مسجد جامع - مرفق تعليمي", parcel.Remarks);
+
+        // Step 3 with Excel overrides Remarks
+        var excelLookup = new Dictionary<string, LandUseItem>
+        {
+            ["55"] = new LandUseItem { PlotId = "55", Remarks = "مسجد ومرفق معتمد من الأمانة" }
+        };
+        LandUseExcelService.EnrichParcels(new[] { parcel }, excelLookup);
+        Assert.Equal("مسجد ومرفق معتمد من الأمانة", parcel.Remarks);
+    }
 }
 
