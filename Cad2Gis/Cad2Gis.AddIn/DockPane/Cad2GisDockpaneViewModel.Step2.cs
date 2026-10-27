@@ -34,13 +34,18 @@ namespace Cad2Gis.AddIn.DockPane;
 /// </summary>
 public partial class Cad2GisDockpaneViewModel
 {
-    public async Task ExecuteStep2Async(bool isPartOfPipeline = false)
+    public async Task ExecuteStep2Async(bool isPartOfPipeline = false, CancellationToken token = default)
     {
-        if (!isPartOfPipeline) IsBusy = true;
+        if (!isPartOfPipeline)
+        {
+            IsBusy = true;
+            token = StartNewOperationToken();
+        }
         ReportProgress(5, "الخطوة 2: استخراج وبلمرة مضلعات البارسلات", "فحص مصدر البيانات ونطاق الطبقات...", phase: "المرحلة 2 من 5");
 
         try
         {
+            token.ThrowIfCancellationRequested();
             // Save any pending user map edits in ArcGIS Pro to ensure they are picked up in the GDB
             await GdbFeatureClassService.SaveMapEditsAsync();
             // Step 2 Input Verification (Previous Step 1 or Own Data)
@@ -1107,6 +1112,11 @@ public partial class Cad2GisDockpaneViewModel
             }
 
             ResetProgress($"الخطوة 2 اكتملت: تم استخراج {_parcels.Count} مضلع/قطعة (2D Planar) بنجاح ({mainCount} رئيسية، {subCount} خدمات).", "اكتمل استخراج البارسلات");
+        }
+        catch (OperationCanceledException)
+        {
+            ReportProgress(0, "تم إلغاء الخطوة 2", "تم إيقاف استخراج وبلمرة مضلعات البارسلات بناءً على طلبك.", status: "تم إلغاء الخطوة 2 بواسطة المستخدم.", phase: "ملغاة");
+            if (isPartOfPipeline) throw;
         }
         catch (Exception ex)
         {

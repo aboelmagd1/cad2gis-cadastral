@@ -178,6 +178,7 @@ public partial class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contrac
         LoadAvailableProfiles();
 
         // Initialize Commands
+        CancelOperationCommand = new RelayCommand(CancelActiveOperation);
         ScanCadLayersCommand = new RelayCommand(async () => await ExecuteStep1Async(), () => !IsBusy);
         BuildParcelsCommand = new RelayCommand(async () => await ExecuteStep2Async(), () => !IsBusy);
         PopulateSchemaCommand = new RelayCommand(async () => await ExecuteStep3PopulateSchemaAsync(), () => !IsBusy);
@@ -461,7 +462,56 @@ public partial class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contrac
     public new bool IsBusy
     {
         get => _isBusy;
-        set => SetProperty(ref _isBusy, value);
+        set
+        {
+            if (SetProperty(ref _isBusy, value))
+            {
+                System.Windows.Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                {
+                    CommandManager.InvalidateRequerySuggested();
+                }));
+            }
+        }
+    }
+
+    private CancellationTokenSource? _activeCancellationTokenSource;
+
+    public CancellationToken StartNewOperationToken()
+    {
+        try
+        {
+            if (_activeCancellationTokenSource != null)
+            {
+                _activeCancellationTokenSource.Cancel();
+                _activeCancellationTokenSource.Dispose();
+            }
+        }
+        catch { }
+
+        _activeCancellationTokenSource = new CancellationTokenSource();
+        return _activeCancellationTokenSource.Token;
+    }
+
+    public void CancelActiveOperation()
+    {
+        if (_activeCancellationTokenSource != null && !_activeCancellationTokenSource.IsCancellationRequested)
+        {
+            ReportProgress(ProgressValue, "جاري إيقاف العملية...", "تم طلب الإلغاء بواسطة المستخدم، جاري إيقاف المعالجة بأمان...", status: "جاري الإلغاء...");
+            try
+            {
+                _activeCancellationTokenSource.Cancel();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Cancel] {ex.Message}");
+            }
+        }
+        else
+        {
+            // Fallback for unresponsive state: force release IsBusy
+            IsBusy = false;
+            ReportError("تم إلغاء العملية واستعادة التحكم بالواجهة.", "تم الإلغاء");
+        }
     }
 
     private string _statusMessage = "Ready. Select Source CAD Drawing (.dwg / .dxf) to start processing.";
@@ -2184,6 +2234,7 @@ public partial class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contrac
 
     #region Commands
 
+    public ICommand CancelOperationCommand { get; }
     public ICommand BrowseCadDrawingCommand { get; }
     public ICommand ScanCadLayersCommand { get; }
     public ICommand BuildParcelsCommand { get; }

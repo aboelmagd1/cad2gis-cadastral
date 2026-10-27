@@ -34,13 +34,18 @@ namespace Cad2Gis.AddIn.DockPane;
 /// </summary>
 public partial class Cad2GisDockpaneViewModel
 {
-    public async Task ExecuteStep1Async()
+    public async Task ExecuteStep1Async(CancellationToken token = default, bool isPartOfPipeline = false)
     {
-        IsBusy = true;
+        if (!isPartOfPipeline)
+        {
+            IsBusy = true;
+            token = StartNewOperationToken();
+        }
         ReportProgress(5, "الخطوة 1: فحص وتحويل الكاد إلى داتاسيت", "جاري التحقق من مصدر الرسم ونطاق الإسقاط...", phase: "المرحلة 1 من 5");
 
         try
         {
+            token.ThrowIfCancellationRequested();
             // Ensure Export_Output directory exists!
             if (string.IsNullOrWhiteSpace(OutputDirectory))
             {
@@ -293,13 +298,18 @@ public partial class Cad2GisDockpaneViewModel
             }
             RegisterStepOutput(1, step1Output, CadLayers.Count, SelectedUtmZone);
         }
+        catch (OperationCanceledException)
+        {
+            ReportProgress(0, "تم إلغاء الخطوة 1", "تم إيقاف فحص واستيراد الكاد بناءً على طلبك.", status: "تم إلغاء الخطوة 1 بواسطة المستخدم.", phase: "ملغاة");
+            if (isPartOfPipeline) throw;
+        }
         catch (Exception ex)
         {
             ReportError($"Step 1 Error: {ex.Message}", "خطأ في الخطوة 1");
         }
         finally
         {
-            IsBusy = false;
+            if (!isPartOfPipeline) IsBusy = false;
         }
     }
 

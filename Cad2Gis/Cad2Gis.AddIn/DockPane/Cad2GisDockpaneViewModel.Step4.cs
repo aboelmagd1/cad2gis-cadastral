@@ -34,13 +34,18 @@ namespace Cad2Gis.AddIn.DockPane;
 /// </summary>
 public partial class Cad2GisDockpaneViewModel
 {
-    public async Task ExecuteStep4BordersAsync(bool isPartOfPipeline = false)
+    public async Task ExecuteStep4BordersAsync(bool isPartOfPipeline = false, CancellationToken token = default)
     {
-        if (!isPartOfPipeline) IsBusy = true;
+        if (!isPartOfPipeline)
+        {
+            IsBusy = true;
+            token = StartNewOperationToken();
+        }
         ReportProgress(10, "الخطوة 4: تفكيك الواجهات واستشعار الشوارع", "حصر القطع الرئيسية وتجهيز المحرك الهندسي...", phase: "المرحلة 4 من 5");
 
         try
         {
+            token.ThrowIfCancellationRequested();
             // Protection of manual edits: confirm before overwriting existing or manually modified borders
             if (!isPartOfPipeline && (_borders.Count > 0 || InferredBorders.Count > 0))
             {
@@ -149,6 +154,7 @@ public partial class Cad2GisDockpaneViewModel
 
                 foreach (var p in mainParcelsList)
                 {
+                    token.ThrowIfCancellationRequested();
                     mainIdx++;
                     double curPct = totalMainParcels > 0 ? 15.0 + (70.0 * mainIdx / totalMainParcels) : 50.0;
                     int curPctInt = (int)Math.Round(curPct);
@@ -284,6 +290,11 @@ public partial class Cad2GisDockpaneViewModel
             RegisterStepOutput(4, verifiedBorderFc, _borders.Count, SelectedUtmZone);
             BorderCountSummary = $"Borders: {_borders.Count} records (MAIN parcels only, 4 per parcel)";
             ResetProgress($"الخطوة 4 اكتملت: تم إنشاء {_borders.Count} خط حدود وحفظها داخل '{fcBorderName}'.", "اكتمل توليد الحدود");
+        }
+        catch (OperationCanceledException)
+        {
+            ReportProgress(0, "تم إلغاء الخطوة 4", "تم إيقاف تفكيك الواجهات واستشعار الشوارع بناءً على طلبك.", status: "تم إلغاء الخطوة 4 بواسطة المستخدم.", phase: "ملغاة");
+            if (isPartOfPipeline) throw;
         }
         catch (Exception ex)
         {

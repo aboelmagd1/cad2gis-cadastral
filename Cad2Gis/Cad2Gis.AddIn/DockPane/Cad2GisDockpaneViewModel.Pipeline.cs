@@ -78,25 +78,30 @@ public partial class Cad2GisDockpaneViewModel
     public async Task ExecutePipelineAsync()
     {
         IsBusy = true;
+        var token = StartNewOperationToken();
         ReportProgress(5, "خط المعالجة: بدء التشغيل المتتابع", "تشغيل الخطوات من 1 إلى 5 بالكامل...", phase: "خط المعالجة");
 
         try
         {
+            token.ThrowIfCancellationRequested();
             SelectedTabIndex = 0;
             ReportProgress(10, "خط المعالجة: المرحلة 1/5", "فحص واستيراد طبقات الكاد وتحويله لداتاسيت...", phase: "المرحلة 1 من 5");
-            await ExecuteStep1Async();
+            await ExecuteStep1Async(token, isPartOfPipeline: true);
 
+            token.ThrowIfCancellationRequested();
             SelectedTabIndex = 1;
             ReportProgress(30, "خط المعالجة: المرحلة 2/5", "استخراج وبلمرة مضلعات البارسلات (2D Planar)...", phase: "المرحلة 2 من 5");
-            await ExecuteStep2Async(isPartOfPipeline: true);
+            await ExecuteStep2Async(isPartOfPipeline: true, token);
 
+            token.ThrowIfCancellationRequested();
             SelectedTabIndex = 2;
             ReportProgress(50, "خط المعالجة: المرحلة 3/5", "تعبئة البيانات والسكيما المعتمدة وجداول الاستخدام...", phase: "المرحلة 3 من 5");
-            await ExecuteStep3PopulateSchemaAsync(isPartOfPipeline: true);
+            await ExecuteStep3PopulateSchemaAsync(isPartOfPipeline: true, token);
 
+            token.ThrowIfCancellationRequested();
             SelectedTabIndex = 3;
             ReportProgress(70, "خط المعالجة: المرحلة 4/5", "تفكيك الواجهات واستشعار الشوارع بالأشعة...", phase: "المرحلة 4 من 5");
-            await ExecuteStep4BordersAsync(isPartOfPipeline: true);
+            await ExecuteStep4BordersAsync(isPartOfPipeline: true, token);
 
             if (PauseAtReviewTables && InferredBorders.Count > 0)
             {
@@ -105,11 +110,16 @@ public partial class Cad2GisDockpaneViewModel
                 return;
             }
 
+            token.ThrowIfCancellationRequested();
             SelectedTabIndex = 4;
             ReportProgress(90, "خط المعالجة: المرحلة 5/5", "التصدير النهائي والتدقيق الشامل...", phase: "المرحلة 5 من 5");
-            await ExecuteStep5ExportQaAsync(isPartOfPipeline: true);
+            await ExecuteStep5ExportQaAsync(isPartOfPipeline: true, token);
 
             ResetProgress("🎉 اكتمل خط المعالجة المتتابع بالكامل بنجاح 100%!", "اكتملت جميع المراحل 100%");
+        }
+        catch (OperationCanceledException)
+        {
+            ReportProgress(0, "تم إلغاء خط المعالجة", "تم إيقاف تشغيل الخطوات المتتابعة بناءً على طلبك دون تلف البيانات.", status: "تم إلغاء العملية بواسطة المستخدم.", phase: "ملغاة");
         }
         catch (Exception ex)
         {

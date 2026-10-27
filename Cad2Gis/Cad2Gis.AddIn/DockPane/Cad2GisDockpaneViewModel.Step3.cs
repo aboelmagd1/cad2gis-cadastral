@@ -34,9 +34,13 @@ namespace Cad2Gis.AddIn.DockPane;
 /// </summary>
 public partial class Cad2GisDockpaneViewModel
 {
-    public async Task ExecuteStep3PopulateSchemaAsync(bool isPartOfPipeline = false)
+    public async Task ExecuteStep3PopulateSchemaAsync(bool isPartOfPipeline = false, CancellationToken token = default)
     {
-        if (!isPartOfPipeline) IsBusy = true;
+        if (!isPartOfPipeline)
+        {
+            IsBusy = true;
+            token = StartNewOperationToken();
+        }
         ReportProgress(10, "الخطوة 3: تعبئة الاسكيما والبيانات البلدية", "التحقق من مصدر البيانات وتطبيق نموذج MOMRAH (26 حقلاً)...", phase: "المرحلة 3 من 5");
 
         string traceLogPath = Path.Combine(_helperManager.LogsDir, "step3_trace.log");
@@ -45,6 +49,7 @@ public partial class Cad2GisDockpaneViewModel
 
         try
         {
+            token.ThrowIfCancellationRequested();
             // 1. Resolve & Validate Step 3 Input from disk
             string step3Input;
             using (tracer.BeginPhase("validate input"))
@@ -380,6 +385,12 @@ public partial class Cad2GisDockpaneViewModel
 
             ResetProgress($"اكتملت الخطوة 3: تم حفظ وتوثيق {_parcels.Count} قطعة بالاسكيما البلدية داخل '{fcParcelName}' بنجاح.", "اكتملت الخطوة 3");
             tracer.LogInfo("=== Step 3 Completed Successfully ===");
+        }
+        catch (OperationCanceledException)
+        {
+            tracer.LogInfo("Step 3 was canceled by user.");
+            ReportProgress(0, "تم إلغاء الخطوة 3", "تم إيقاف تعبئة الاسكيما والبيانات البلدية بناءً على طلبك.", status: "تم إلغاء الخطوة 3 بواسطة المستخدم.", phase: "ملغاة");
+            if (isPartOfPipeline) throw;
         }
         catch (Exception ex)
         {

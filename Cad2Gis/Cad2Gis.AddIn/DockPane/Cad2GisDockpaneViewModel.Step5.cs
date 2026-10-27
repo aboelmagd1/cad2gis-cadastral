@@ -34,13 +34,18 @@ namespace Cad2Gis.AddIn.DockPane;
 /// </summary>
 public partial class Cad2GisDockpaneViewModel
 {
-    public async Task ExecuteStep5ExportQaAsync(bool isPartOfPipeline = false)
+    public async Task ExecuteStep5ExportQaAsync(bool isPartOfPipeline = false, CancellationToken token = default)
     {
-        if (!isPartOfPipeline) IsBusy = true;
+        if (!isPartOfPipeline)
+        {
+            IsBusy = true;
+            token = StartNewOperationToken();
+        }
         ReportProgress(10, "الخطوة 5: التدقيق الشامل والتصدير النهائي", "بدء تدقيق الجودة وتجهيز مجلد المخرجات...", phase: "المرحلة 5 من 5");
 
         try
         {
+            token.ThrowIfCancellationRequested();
             string baseOut = string.IsNullOrWhiteSpace(OutputDirectory) ? ResolveBaseFolder() : OutputDirectory;
             string finalExportDir = ResolveUniqueExportFolder(baseOut, PlanNo, CityName ?? CityId, NeighbourhoodName ?? Neighbourhood);
 
@@ -449,6 +454,11 @@ public partial class Cad2GisDockpaneViewModel
             }
 
             ResetProgress($"الخطوة 5 اكتملت: تم تصدير مجلد Final بكافة محتوياته بنجاح.", "اكتمل التصدير والتدقيق");
+        }
+        catch (OperationCanceledException)
+        {
+            ReportProgress(0, "تم إلغاء الخطوة 5", "تم إيقاف التصدير والتدقيق النهائي بناءً على طلبك.", status: "تم إلغاء الخطوة 5 بواسطة المستخدم.", phase: "ملغاة");
+            if (isPartOfPipeline) throw;
         }
         catch (Exception ex)
         {

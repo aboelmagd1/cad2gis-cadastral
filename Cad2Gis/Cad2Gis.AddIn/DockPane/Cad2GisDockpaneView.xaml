@@ -1713,10 +1713,11 @@
                 <!-- Modern Live Action Progress Console (شريط التقدم الحي لكل عملية) -->
                 <Border Background="#0F172A" BorderBrush="#24324D" BorderThickness="1" CornerRadius="5" Padding="8,6" Margin="0,2,0,0">
                     <StackPanel>
-                        <!-- Action Title & Percentage Badge Header -->
+                        <!-- Action Title, Cancel Button & Percentage Badge Header -->
                         <Grid Margin="0,0,0,5">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
@@ -1727,8 +1728,23 @@
                                 <TextBlock Text="{Binding CurrentActionText}" FontWeight="Bold" FontSize="11" Foreground="#F8FAFC" TextTrimming="CharacterEllipsis"/>
                             </StackPanel>
 
+                            <!-- Cancel Button in Progress Header -->
+                            <Button Grid.Column="1" 
+                                    Command="{Binding CancelOperationCommand}" 
+                                    Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
+                                    Content="⛔ إلغاء (Cancel)" 
+                                    Height="22" Padding="8,1" Margin="4,0,6,0"
+                                    Background="#DC2626" Foreground="White" FontWeight="Bold" FontSize="10"
+                                    BorderThickness="0" Cursor="Hand" ToolTip="إلغاء العملية الجارية فوراً ومنع التجمد (Cancel current operation)">
+                                <Button.Resources>
+                                    <Style TargetType="Border">
+                                        <Setter Property="CornerRadius" Value="4"/>
+                                    </Style>
+                                </Button.Resources>
+                            </Button>
+
                             <!-- Percentage Badge -->
-                            <Border Grid.Column="1" Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="6,1" VerticalAlignment="Center">
+                            <Border Grid.Column="2" Background="#1E293B" BorderBrush="#334155" BorderThickness="1" CornerRadius="4" Padding="6,1" VerticalAlignment="Center">
                                 <TextBlock Text="{Binding ProgressPercentageText}" FontWeight="Bold" FontSize="11" Foreground="#38BDF8"/>
                             </Border>
                         </Grid>
@@ -1760,15 +1776,29 @@
             </StackPanel>
         </Border>
 
-        <!-- Live Status Box (Detailed Log Message) -->
+        <!-- Live Status Box (Detailed Log Message with Cancel Option) -->
         <Border Grid.Row="3" Background="#111827" BorderBrush="#334155" BorderThickness="1" CornerRadius="5" Padding="7,6" Margin="0,4,0,0">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="💬" FontSize="11" Margin="0,0,6,0" VerticalAlignment="Top"/>
-                <TextBlock Grid.Column="1" Text="{Binding StatusMessage}" FontSize="10" Foreground="#38BDF8" TextWrapping="Wrap" LineHeight="14"/>
+                <TextBlock Grid.Column="0" Text="💬" FontSize="11" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Text="{Binding StatusMessage}" FontSize="10" Foreground="#38BDF8" TextWrapping="Wrap" LineHeight="14" VerticalAlignment="Center"/>
+                <Button Grid.Column="2" 
+                        Command="{Binding CancelOperationCommand}" 
+                        Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
+                        Content="⛔ إلغاء (Cancel)" 
+                        Height="22" Padding="8,1" Margin="6,0,0,0"
+                        Background="#DC2626" Foreground="White" FontWeight="Bold" FontSize="9.5"
+                        BorderThickness="0" Cursor="Hand" ToolTip="إلغاء العملية الحالية واستعادة التحكم بالبرنامج">
+                    <Button.Resources>
+                        <Style TargetType="Border">
+                            <Setter Property="CornerRadius" Value="4"/>
+                        </Style>
+                    </Button.Resources>
+                </Button>
             </Grid>
         </Border>
     </Grid>
