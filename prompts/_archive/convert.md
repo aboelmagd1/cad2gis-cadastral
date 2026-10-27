@@ -1,3 +1,9 @@
+---
+Status: SUPERSEDED by prompts/spec/04_STEP2_PARCELS_SPEC.md
+Date: 2026-10-27
+Notes: Fully superseded and consolidated into prompts/spec/04_STEP2_PARCELS_SPEC.md and 01_PRODUCT_OVERVIEW.md. Retained in archive for historical record.
+---
+
 # CAD Lines to Polygon — ArcPy Feature To Polygon Engine (2D Planar, No Z/M)
 
 The approved specification files and immutable invariants in [CHANGELOG_MODIFICATIONS.md](CHANGELOG_MODIFICATIONS.md) and [promt 01010.md](promt 01010.md) are the primary sources of truth; report any conflict.

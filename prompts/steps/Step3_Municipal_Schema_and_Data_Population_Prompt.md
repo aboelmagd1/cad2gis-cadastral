@@ -1,3 +1,9 @@
+---
+Status: ACTIVE | MERGED into prompts/spec/05_STEP3_ATTRIBUTES_SPEC.md
+Date: 2026-10-27
+Notes: Active Step 3 functional prompt. Fully consolidated into authoritative specification prompts/spec/05_STEP3_ATTRIBUTES_SPEC.md. Note: PLOT_ID pulls from PLOT_TXT in Line with data layer mode per Owner D10.
+---
+
 # CAD2GIS — الخطوة 3: تعبئة وتدقيق بيانات المخطط والاسكيما البلدية المعتمدة
 # Step 3: Municipal Schema, Attribute Population & Verification Prompt
 

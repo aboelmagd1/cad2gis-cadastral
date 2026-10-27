@@ -1,3 +1,9 @@
+---
+Status: SUPERSEDED by prompts/spec/
+Date: 2026-10-27
+Notes: Fully superseded and consolidated into prompts/spec/02_PIPELINE_AND_DATA_FLOW.md through 07_STEP5_EXPORT_QA_SPEC.md. Overrides incorporated into decisions log (13_DECISIONS_LOG.md). Retained in archive for historical record.
+---
+
 # CAD2GIS — Addendum Prompt (Priority Requirements v4.4)
 
 Apply the requirements below on top of the CAD2GIS plan/prompt for ArcGIS Pro 3.3.0 (.NET 8). Where this addendum conflicts with earlier baseline documentation, **this addendum wins**. Items updating earlier specifications are marked **[OVERRIDES]**.

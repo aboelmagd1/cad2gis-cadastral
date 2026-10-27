@@ -1,3 +1,9 @@
+---
+Status: ACTIVE | MERGED into prompts/spec/04_STEP2_PARCELS_SPEC.md
+Date: 2026-10-27
+Notes: Active Step 2 functional prompt. Fully consolidated into authoritative specification prompts/spec/04_STEP2_PARCELS_SPEC.md.
+---
+
 # CAD2GIS — الخطوة 2: بناء واستخراج المضلعات والبارسلات ومعالجة المنحنيات
 # Step 2: Polygonization, True Curves Preservation & Parcel Extraction Prompt
 

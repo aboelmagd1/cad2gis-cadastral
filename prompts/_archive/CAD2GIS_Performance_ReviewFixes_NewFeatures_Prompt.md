@@ -1,3 +1,9 @@
+---
+Status: SUPERSEDED by prompts/spec/04_STEP2_PARCELS_SPEC.md and prompts/spec/06_STEP4_BORDERS_SPEC.md
+Date: 2026-10-27
+Notes: Fully superseded and consolidated into prompts/spec/04_STEP2_PARCELS_SPEC.md, 06_STEP4_BORDERS_SPEC.md, and 02_PIPELINE_AND_DATA_FLOW.md. Retained in archive for historical record.
+---
+
 # CAD2GIS — Prompt: Step 4 performance, review fixes, and the new "Line with data layer" mode
 
 Work on the current repository (the Add-in is split into `Cad2GisDockpaneViewModel.Step1..Step5.cs` / `.Pipeline.cs`). Read the real code before changing it, make surgical changes, keep the working behaviour, and never claim a test passed that you did not run. `Cad2Gis.AddIn` needs ArcGIS Pro; run `dotnet test` for what builds without Pro (`Cad2Gis.Core`) and state clearly what could not be built or run.

@@ -1,3 +1,9 @@
+---
+Status: SUPERSEDED by prompts/spec/06_STEP4_BORDERS_SPEC.md
+Date: 2026-10-27
+Notes: Fully superseded and consolidated into prompts/spec/06_STEP4_BORDERS_SPEC.md and 02_PIPELINE_AND_DATA_FLOW.md. Retained in archive for historical record.
+---
+
 # Prompt: CAD2GIS Border Extraction and Continue from Latest Export (v4.4)
 
 Use the skills: `cad-border-extraction`, `cad2gis-neighbor-description-inference`, `cad2gis-export-and-resume`, `preserve-curve-geometry`, `gis-project-engineering-standards`.

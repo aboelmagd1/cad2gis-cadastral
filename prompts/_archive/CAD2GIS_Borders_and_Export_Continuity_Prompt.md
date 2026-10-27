@@ -1,3 +1,9 @@
+---
+Status: SUPERSEDED by prompts/spec/06_STEP4_BORDERS_SPEC.md
+Date: 2026-10-27
+Notes: Fully superseded and consolidated into prompts/spec/06_STEP4_BORDERS_SPEC.md and 07_STEP5_EXPORT_QA_SPEC.md. Retained in archive for historical record.
+---
+
 # Prompt: CAD2GIS Borders and Export Continuity (Production v4.4)
 
 Apply this specification to the ArcGIS Pro 3.3.0 Add-in (.NET 8). The approved specification files and immutable invariants in [CHANGELOG_MODIFICATIONS.md](CHANGELOG_MODIFICATIONS.md) and [promt 01010.md](promt 01010.md) are the primary sources of truth; report any conflict. Inspect existing code before modifying.

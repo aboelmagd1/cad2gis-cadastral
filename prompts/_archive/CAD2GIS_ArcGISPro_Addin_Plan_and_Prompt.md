@@ -1,3 +1,9 @@
+---
+Status: SUPERSEDED by prompts/spec/
+Date: 2026-10-27
+Notes: Fully superseded and consolidated into authoritative specification suite (prompts/spec/00_INDEX.md through 14_REBUILD_PLAYBOOK.md). Retained in archive for historical record.
+---
+
 # CAD2GIS as an ArcGIS Pro 3.3.0 Add-in — Plan & Execution Prompt (Production v4.4)
 ## Native Geodatabase Feature Classes Engine, 5-Step Pipeline, Smart Schema Auto-Mapping & Deliverables Exporter
 

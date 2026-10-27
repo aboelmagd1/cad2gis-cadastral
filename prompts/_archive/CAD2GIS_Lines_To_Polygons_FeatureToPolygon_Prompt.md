@@ -1,3 +1,9 @@
+---
+Status: SUPERSEDED by prompts/spec/04_STEP2_PARCELS_SPEC.md
+Date: 2026-10-27
+Notes: Fully superseded and consolidated into prompts/spec/04_STEP2_PARCELS_SPEC.md. Retained in archive for historical record.
+---
+
 # CAD2GIS — Prompt: Lines → Parcel Polygons (Selection + Feature To Polygon, Z disabled)
 
 **Scope:** change only the Step 2 branch that runs when the user chooses the **Lines** geometry mode (the code path that currently calls `GdbFeatureClassService.RunFeatureToPolygonReportAsync` from `Cad2GisDockpaneViewModel`). Do not touch the other geometry modes, the text joins, Step 1, or Steps 3–5.

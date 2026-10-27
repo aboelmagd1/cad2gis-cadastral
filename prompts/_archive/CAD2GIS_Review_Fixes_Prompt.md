@@ -1,3 +1,9 @@
+---
+Status: SUPERSEDED by prompts/spec/
+Date: 2026-10-27
+Notes: Fully superseded and consolidated into prompts/spec/02_PIPELINE_AND_DATA_FLOW.md through 07_STEP5_EXPORT_QA_SPEC.md. Fixes verified and recorded in code. Retained in archive for historical record.
+---
+
 # CAD2GIS — Detailed Fix Prompt (from the code review of `cad2gis-cadastral-main.zip`)
 
 You are fixing confirmed defects in the CAD2GIS ArcGIS Pro 3.3 Add-in (`Cad2Gis/Cad2Gis.AddIn`, `Cad2Gis.Core`, `Cad2Gis.Tests`). Every issue below was found by reading the actual code; file names and line numbers refer to the reviewed snapshot (they may have drifted — search by the quoted code). For each issue you get: the **problem with a concrete example**, the **root cause**, the **required fix with a before/after example**, and a **test**.

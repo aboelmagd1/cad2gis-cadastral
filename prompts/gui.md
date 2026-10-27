@@ -1,3 +1,9 @@
+---
+Status: ACTIVE | MERGED into prompts/spec/10_UI_SPEC.md
+Date: 2026-10-27
+Notes: Active UI layout and design guide. Codified into authoritative specification prompts/spec/10_UI_SPEC.md.
+---
+
 # CAD2GIS — الدليل الشامل لواجهة المستخدم (DockPane UI/UX Specification & Guide)
 
 > **اسم الملف:** `gui.md`  

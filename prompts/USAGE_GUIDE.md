@@ -1,3 +1,9 @@
+---
+Status: ACTIVE | MERGED into prompts/spec/
+Date: 2026-10-27
+Notes: Active user manual and operational guide. Harmonized with authoritative specifications (prompts/spec/00_INDEX.md through 14_REBUILD_PLAYBOOK.md).
+---
+
 # 📘 دليل استخدام أداة CAD2GIS التحويلية (CAD to GIS Cadastral Manual)
 
 ### التوافق الكامل مع معايير منصة بلدي ووزارة الشؤون البلدية والقروية والإسكان (MOMRAH) والهيئة العامة للمساحة (GEOSA)

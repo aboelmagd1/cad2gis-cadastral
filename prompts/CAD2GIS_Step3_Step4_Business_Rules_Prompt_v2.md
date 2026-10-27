@@ -1,3 +1,9 @@
+---
+Status: ACTIVE | MERGED into prompts/spec/05_STEP3_ATTRIBUTES_SPEC.md and 06_STEP4_BORDERS_SPEC.md
+Date: 2026-10-27
+Notes: Active business rules reference. Note: PLT is confirmed as BORDERTYPE only (not USAGE) per Owner D08; single ray midpoint is default per Owner D13; see prompts/spec/ for authoritative rules.
+---
+
 # CAD2GIS Cadastral — Step 3 & Step 4 Business Rules (النسخة 2، بعد مراجعة المالك)
 
 هذه النسخة تحل محل ملف قواعد Step 3 وStep 4 السابق. اقرأ الكود الفعلي قبل أي تعديل، وطبّق أقل تغيير ممكن، ولا تغيّر قواعد معالجة المنحنيات أو تقسيم ودمج الحدود المعتمدة.

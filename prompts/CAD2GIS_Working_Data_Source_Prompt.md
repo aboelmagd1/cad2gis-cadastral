@@ -1,3 +1,9 @@
+---
+Status: ACTIVE | MERGED into prompts/spec/02_PIPELINE_AND_DATA_FLOW.md
+Date: 2026-10-27
+Notes: Active working data source reference. Authoritative two-option source rule (D02) codified into prompts/spec/02_PIPELINE_AND_DATA_FLOW.md and 10_UI_SPEC.md.
+---
+
 # CAD2GIS — Prompt: Working Data Source (each step builds on the previous step)
 
 **Scope:** change only how each step chooses and reads its input data (the "working data source"). Do not change the algorithms inside the steps. This prompt **replaces** the earlier "Latest export" source mode, the "continue from latest export" default, and the export-history selector.

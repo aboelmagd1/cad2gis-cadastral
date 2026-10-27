@@ -1,3 +1,9 @@
+---
+Status: ACTIVE | MERGED into prompts/spec/01_PRODUCT_OVERVIEW.md and 13_DECISIONS_LOG.md
+Date: 2026-10-27
+Notes: Active historical modifications changelog. All immutable invariants codified into prompts/spec/01_PRODUCT_OVERVIEW.md (INV-01..INV-08).
+---
+
 # CAD2GIS — سجل التعديلات والمتطلبات الثابتة (Modifications & Immutable Invariants Log)
 
 > **الغرض من هذا الملف:**

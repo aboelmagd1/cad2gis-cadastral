@@ -1,3 +1,9 @@
+---
+Status: ACTIVE | MERGED into prompts/spec/07_STEP5_EXPORT_QA_SPEC.md
+Date: 2026-10-27
+Notes: Active Step 5 functional prompt. Fully consolidated into authoritative specification prompts/spec/07_STEP5_EXPORT_QA_SPEC.md. Note: Mandatory 4 deliverables produced per Owner D03.
+---
+
 # CAD2GIS — الخطوة 5: الفحص النهائي ومطابقة الجودة وتصدير المخرجات الرسمية
 # Step 5: QA/QC Validation Engine, Multi-Format Deliverables & Export Prompt
 

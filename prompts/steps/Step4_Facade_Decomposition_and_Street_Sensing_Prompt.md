@@ -1,3 +1,9 @@
+---
+Status: ACTIVE | MERGED into prompts/spec/06_STEP4_BORDERS_SPEC.md
+Date: 2026-10-27
+Notes: Active Step 4 functional prompt. Fully consolidated into authoritative specification prompts/spec/06_STEP4_BORDERS_SPEC.md. Note: Single ray midpoint is default per Owner D13; DIMENSION threshold is 15° per Owner D14.
+---
+
 # CAD2GIS — الخطوة 4: تفكيك واجهات القطع واستشعار الشوارع والمجاورات وحساب العروض
 # Step 4: 4-Cardinal Boundary Model, Facade Decomposition & Street Sensing Prompt
 

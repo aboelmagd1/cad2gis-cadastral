@@ -1,3 +1,9 @@
+---
+Status: ACTIVE | MERGED into prompts/spec/03_STEP1_LAYERS_SPEC.md
+Date: 2026-10-27
+Notes: Active Step 1 functional prompt. Fully consolidated into authoritative specification prompts/spec/03_STEP1_LAYERS_SPEC.md.
+---
+
 # CAD2GIS — الخطوة 1: استيراد وفحص مخطط الكاد وتعيين الإحداثيات وتصنيف الطبقات
 # Step 1: CAD Read, Spatial Reference & Layer Inspection Specification Prompt
 
