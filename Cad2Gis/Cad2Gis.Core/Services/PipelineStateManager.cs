@@ -96,29 +96,48 @@ public static class PipelineStateManager
     }
 
     /// <summary>
+    /// Custom resolver for computing content stamp of non-file datasets (e.g. GDB feature classes).
+    /// </summary>
+    public static Func<string, string>? ContentStampResolver { get; set; }
+
+    /// <summary>
     /// Computes a lightweight content stamp (hash / timestamp marker) of a dataset path to detect manual edits.
+    /// Uses data-level hashing to prevent false positives when unrelated files in the same container change.
     /// </summary>
     public static string ComputeContentStamp(string datasetPath)
     {
         if (string.IsNullOrWhiteSpace(datasetPath)) return string.Empty;
         try
         {
+            if (ContentStampResolver != null)
+            {
+                var custom = ContentStampResolver(datasetPath);
+                if (!string.IsNullOrEmpty(custom)) return custom;
+            }
+
             if (File.Exists(datasetPath))
             {
                 var fi = new FileInfo(datasetPath);
                 return $"{fi.LastWriteTimeUtc.Ticks}_{fi.Length}";
             }
-            if (Directory.Exists(datasetPath)) // E.g., .gdb folder
+            if (Directory.Exists(datasetPath))
             {
                 var di = new DirectoryInfo(datasetPath);
                 return $"{di.LastWriteTimeUtc.Ticks}";
             }
-            // For GDB feature classes: "C:\path\file.gdb\FeatureClass"
+            // For GDB feature classes or internal dataset items without custom resolver:
+            // Do NOT use the parent .gdb directory timestamp because touching unrelated feature classes
+            // or lock files changes the folder timestamp!
             string? dir = Path.GetDirectoryName(datasetPath);
             if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
             {
-                var di = new DirectoryInfo(dir);
-                return $"{di.LastWriteTimeUtc.Ticks}";
+                string name = Path.GetFileName(datasetPath);
+                string specificItemPath = Path.Combine(dir, name);
+                if (File.Exists(specificItemPath))
+                {
+                    var fi = new FileInfo(specificItemPath);
+                    return $"{fi.LastWriteTimeUtc.Ticks}_{fi.Length}";
+                }
             }
         }
         catch { }

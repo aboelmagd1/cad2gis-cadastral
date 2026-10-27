@@ -85,7 +85,7 @@ public static class GdbFeatureClassService
         }
     }
 
-    public static async Task EnsureFeatureClassFromTemplateAsync(string gdbPath, string fcName, string templatePath, int epsgCode = 0)
+    public static async Task EnsureFeatureClassFromTemplateAsync(string gdbPath, string fcName, string templatePath, int epsgCode = 0, bool includeWorkingFields = false)
     {
         await EnsureGeodatabaseAsync(gdbPath);
 
@@ -154,6 +154,62 @@ public static class GdbFeatureClassService
                 {
                     System.Diagnostics.Debug.WriteLine($"[DefineProjection] Error: {ex.Message}");
                 }
+            }
+        }
+
+        if (includeWorkingFields)
+        {
+            await EnsureWorkingFieldsAsync(gdbPath, fcName);
+        }
+    }
+
+    /// <summary>
+    /// Ensures that all working fields required for Step 2 output (SRC_LAYER, SRC_LAYERS, PARCEL_CLS, etc.)
+    /// exist in the feature class.
+    /// </summary>
+    public static async Task EnsureWorkingFieldsAsync(string gdbPath, string fcName)
+    {
+        var requiredFields = new (string Name, int Length, string Alias)[]
+        {
+            ("SRC_LAYER", 100, "Dominant CAD Layer"),
+            ("SRC_LAYERS", 254, "All Contributing Layers"),
+            ("PARCEL_CLS", 10, "Parcel Class MAIN/SUB"),
+            ("PLOT_TXT", 50, "Matched Plot Text"),
+            ("PLOT_LYR", 100, "Plot Text Layer"),
+            ("USAGE_TXT", 254, "Matched Usage Text"),
+            ("USAGE_LYR", 100, "Usage Text Layer"),
+            ("LYR_USAGE", 50, "Layer-level USAGE"),
+            ("MATCH_MODE", 20, "Match Mode"),
+            ("PROV", 254, "Provenance")
+        };
+
+        var missingFields = new List<(string Name, int Length, string Alias)>();
+        await ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() =>
+        {
+            using var gdb = new Geodatabase(new FileGeodatabaseConnectionPath(new Uri(gdbPath)));
+            using var fc = gdb.OpenDataset<FeatureClass>(fcName);
+            if (fc == null) return;
+            var def = fc.GetDefinition();
+            foreach (var rf in requiredFields)
+            {
+                if (def.FindField(rf.Name) < 0)
+                {
+                    missingFields.Add(rf);
+                }
+            }
+        });
+
+        string targetFcPath = Path.Combine(gdbPath, fcName);
+        foreach (var mf in missingFields)
+        {
+            try
+            {
+                var addFieldArgs = Geoprocessing.MakeValueArray(targetFcPath, mf.Name, "TEXT", "", "", mf.Length.ToString(), mf.Alias);
+                await Geoprocessing.ExecuteToolAsync("management.AddField", addFieldArgs);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[AddField] Notice adding field {mf.Name}: {ex.Message}");
             }
         }
     }
@@ -591,6 +647,20 @@ public static class GdbFeatureClassService
         {
             using var gdb = new Geodatabase(new FileGeodatabaseConnectionPath(new Uri(gdbPath)));
 
+            // 0. Catalog discovered feature classes and text fields in dataset for diagnostics
+            try
+            {
+                var dsDefs = gdb.GetDefinitions<FeatureClassDefinition>();
+                foreach (var d in dsDefs)
+                {
+                    string fcN = d.GetName();
+                    features.DiscoveredFeatureClasses.Add(fcN);
+                    var tf = d.GetFields().Where(f => f.FieldType == FieldType.String).Select(f => f.Name).ToList();
+                    features.FeatureClassTextFields[fcN] = tf;
+                }
+            }
+            catch { }
+
             // 1. Read Polygon Feature Class
             using (var polyFc = OpenDatasetFeatureClass(gdb, "Polygon"))
             {
@@ -713,6 +783,18 @@ public static class GdbFeatureClassService
                 if (annotFc != null)
                 {
                     var def = annotFc.GetDefinition();
+                    var annotSr = def.GetSpatialReference();
+                    if (annotSr != null)
+                    {
+                        features.AnnotationsSpatialReferenceWkid = annotSr.Wkid.ToString();
+                        features.AnnotationsSpatialReferenceName = annotSr.Name;
+                    }
+                    try
+                    {
+                        features.AnnotationsExtent = def.GetExtent();
+                    }
+                    catch { }
+
                     int layerIdx = def.FindField("Layer");
                     int textIdx = def.FindField("Text");
                     int memoIdx = def.FindField("TxtMemo");
@@ -805,6 +887,7 @@ public static class GdbFeatureClassService
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Error reading dataset features: {ex.Message}");
+            features.ReadException = ex;
         }
 
         return features;
@@ -873,6 +956,18 @@ public static class GdbFeatureClassService
             SetFieldSafe(rowBuffer, def, "AREA_SQM", p.AreaSqm);
             SetFieldSafe(rowBuffer, def, "Shape_Area", p.ShapeArea > 0 ? p.ShapeArea : p.AreaSqm);
             SetFieldSafe(rowBuffer, def, "Shape_Leng", p.ShapeLength);
+
+            // Working fields for intermediate feature classes (e.g. Cad_Constructed_Parcels)
+            SetFieldSafe(rowBuffer, def, "SRC_LAYER", p.SourceLayer);
+            SetFieldSafe(rowBuffer, def, "SRC_LAYERS", p.SourceLayers);
+            SetFieldSafe(rowBuffer, def, "PARCEL_CLS", p.TemporaryParcelClass);
+            SetFieldSafe(rowBuffer, def, "PLOT_TXT", p.PlotText);
+            SetFieldSafe(rowBuffer, def, "PLOT_LYR", p.PlotLayer);
+            SetFieldSafe(rowBuffer, def, "USAGE_TXT", p.UsageText);
+            SetFieldSafe(rowBuffer, def, "USAGE_LYR", p.UsageLayer);
+            SetFieldSafe(rowBuffer, def, "LYR_USAGE", p.LayerUsage);
+            SetFieldSafe(rowBuffer, def, "MATCH_MODE", p.MatchMode);
+            SetFieldSafe(rowBuffer, def, "PROV", p.Provenance);
 
             try
             {
@@ -1060,10 +1155,28 @@ public static class GdbFeatureClassService
                 ShapeLength = Convert.ToDouble(GetFieldSafe(row, def, "Shape_Leng") ?? 0.0)
             };
 
-            var parcelTypObj = GetFieldSafe(row, def, "PARCEL_TYP");
-            if (parcelTypObj != null && int.TryParse(parcelTypObj.ToString(), out int pType))
+            p.SourceLayer = GetFieldSafe(row, def, "SRC_LAYER")?.ToString() ?? string.Empty;
+            p.SourceLayers = GetFieldSafe(row, def, "SRC_LAYERS")?.ToString() ?? string.Empty;
+            p.PlotText = GetFieldSafe(row, def, "PLOT_TXT")?.ToString() ?? string.Empty;
+            p.PlotLayer = GetFieldSafe(row, def, "PLOT_LYR")?.ToString() ?? string.Empty;
+            p.UsageText = GetFieldSafe(row, def, "USAGE_TXT")?.ToString() ?? (GetFieldSafe(row, def, "REMARKS")?.ToString() ?? string.Empty);
+            p.UsageLayer = GetFieldSafe(row, def, "USAGE_LYR")?.ToString() ?? string.Empty;
+            p.LayerUsage = GetFieldSafe(row, def, "LYR_USAGE")?.ToString() ?? string.Empty;
+            p.MatchMode = GetFieldSafe(row, def, "MATCH_MODE")?.ToString() ?? "None";
+            p.Provenance = GetFieldSafe(row, def, "PROV")?.ToString() ?? string.Empty;
+
+            var parcelClsObj = GetFieldSafe(row, def, "PARCEL_CLS")?.ToString();
+            if (!string.IsNullOrWhiteSpace(parcelClsObj))
             {
-                p.Class = pType == 2 ? ParcelClass.Sub : ParcelClass.Main;
+                p.Class = parcelClsObj.Equals("SUB", StringComparison.OrdinalIgnoreCase) ? ParcelClass.Sub : ParcelClass.Main;
+            }
+            else
+            {
+                var parcelTypObj = GetFieldSafe(row, def, "PARCEL_TYP");
+                if (parcelTypObj != null && int.TryParse(parcelTypObj.ToString(), out int pType))
+                {
+                    p.Class = pType == 2 ? ParcelClass.Sub : ParcelClass.Main;
+                }
             }
 
             if (row is Feature feature && feature.GetShape() is Polygon poly)
@@ -1113,11 +1226,11 @@ public static class GdbFeatureClassService
                 CityId = GetFieldSafe(row, def, "CITY_ID")?.ToString() ?? string.Empty,
                 Address = GetFieldSafe(row, def, "ADDRESS")?.ToString() ?? string.Empty,
                 Usage = GetFieldSafe(row, def, "USAGE")?.ToString() ?? string.Empty,
-                LayerUsage = GetFieldSafe(row, def, "USAGE")?.ToString() ?? string.Empty,
+                LayerUsage = GetFieldSafe(row, def, "LYR_USAGE")?.ToString() ?? string.Empty,
                 IsBuilding = Convert.ToInt32(GetFieldSafe(row, def, "ISBUILDING") ?? 0),
                 BuildingType = Convert.ToInt32(GetFieldSafe(row, def, "BUILDINGTY") ?? 1),
                 Remarks = GetFieldSafe(row, def, "REMARKS")?.ToString() ?? string.Empty,
-                UsageText = GetFieldSafe(row, def, "REMARKS")?.ToString() ?? string.Empty,
+                UsageText = GetFieldSafe(row, def, "USAGE_TXT")?.ToString() ?? (GetFieldSafe(row, def, "REMARKS")?.ToString() ?? string.Empty),
                 Layout = GetFieldSafe(row, def, "LAYOUT")?.ToString(),
                 PlotId = GetFieldSafe(row, def, "PLOT_ID")?.ToString() ?? string.Empty,
                 BlockNo = GetFieldSafe(row, def, "BLOCK_NO")?.ToString(),
@@ -1136,10 +1249,26 @@ public static class GdbFeatureClassService
                 ShapeLength = Convert.ToDouble(GetFieldSafe(row, def, "Shape_Leng") ?? 0.0)
             };
 
-            var parcelTypObj = GetFieldSafe(row, def, "PARCEL_TYP");
-            if (parcelTypObj != null && int.TryParse(parcelTypObj.ToString(), out int pType))
+            p.SourceLayer = GetFieldSafe(row, def, "SRC_LAYER")?.ToString() ?? string.Empty;
+            p.SourceLayers = GetFieldSafe(row, def, "SRC_LAYERS")?.ToString() ?? string.Empty;
+            p.PlotText = GetFieldSafe(row, def, "PLOT_TXT")?.ToString() ?? string.Empty;
+            p.PlotLayer = GetFieldSafe(row, def, "PLOT_LYR")?.ToString() ?? string.Empty;
+            p.UsageLayer = GetFieldSafe(row, def, "USAGE_LYR")?.ToString() ?? string.Empty;
+            p.MatchMode = GetFieldSafe(row, def, "MATCH_MODE")?.ToString() ?? "None";
+            p.Provenance = GetFieldSafe(row, def, "PROV")?.ToString() ?? string.Empty;
+
+            var parcelClsObj = GetFieldSafe(row, def, "PARCEL_CLS")?.ToString();
+            if (!string.IsNullOrWhiteSpace(parcelClsObj))
             {
-                p.Class = pType == 2 ? ParcelClass.Sub : ParcelClass.Main;
+                p.Class = parcelClsObj.Equals("SUB", StringComparison.OrdinalIgnoreCase) ? ParcelClass.Sub : ParcelClass.Main;
+            }
+            else
+            {
+                var parcelTypObj = GetFieldSafe(row, def, "PARCEL_TYP");
+                if (parcelTypObj != null && int.TryParse(parcelTypObj.ToString(), out int pType))
+                {
+                    p.Class = pType == 2 ? ParcelClass.Sub : ParcelClass.Main;
+                }
             }
 
             if (row is Feature feature && feature.GetShape() is Polygon poly)
@@ -1393,6 +1522,8 @@ public static class GdbFeatureClassService
                     ShapeArea = Convert.ToDouble(GetFieldSafe(row, def, "Shape_Area") ?? 0.0),
                     ShapeLength = Convert.ToDouble(GetFieldSafe(row, def, "Shape_Leng") ?? 0.0)
                 };
+
+                p.PlotText = GetFieldSafe(row, def, "PLOT_TXT")?.ToString() ?? string.Empty;
 
                 var parcelTypObj = GetFieldSafe(row, def, "PARCEL_TYP");
                 if (parcelTypObj != null && int.TryParse(parcelTypObj.ToString(), out int pType))
@@ -2542,9 +2673,8 @@ public static class GdbFeatureClassService
 
     /// <summary>
     /// Verifies that a polygon feature class exists, is readable, has Polygon geometry,
-    /// <summary>
-    /// Verifies that a polygon feature class exists, is readable, has Polygon geometry,
     /// has feature count equal to expectedCount (or >0), and has matching spatial reference WKID.
+    /// MCT-safe: runs internal verification directly if already on worker thread.
     /// </summary>
     public static (bool ok, string reason) VerifyPolygonFeatureClass(string fcPath, int expectedCount, int expectedWkid)
     {
@@ -2560,7 +2690,9 @@ public static class GdbFeatureClassService
             {
                 return VerifyPolygonFeatureClassInternal(fcPath, expectedCount, expectedWkid);
             }
-            return Task.Run(async () => await VerifyPolygonFeatureClassAsync(fcPath, expectedCount, expectedWkid)).GetAwaiter().GetResult();
+            return ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() =>
+                VerifyPolygonFeatureClassInternal(fcPath, expectedCount, expectedWkid)
+            ).GetAwaiter().GetResult();
         }
         catch (Exception ex)
         {
@@ -2640,6 +2772,7 @@ public static class GdbFeatureClassService
     /// <summary>
     /// Verifies that a polyline feature class exists, is readable, has Polyline geometry,
     /// has feature count equal to expectedCount (or >0), and has matching spatial reference WKID.
+    /// MCT-safe: runs internal verification directly if already on worker thread.
     /// </summary>
     public static (bool ok, string reason) VerifyPolylineFeatureClass(string fcPath, int expectedCount, int expectedWkid)
     {
@@ -2655,7 +2788,9 @@ public static class GdbFeatureClassService
             {
                 return VerifyPolylineFeatureClassInternal(fcPath, expectedCount, expectedWkid);
             }
-            return Task.Run(async () => await VerifyPolylineFeatureClassAsync(fcPath, expectedCount, expectedWkid)).GetAwaiter().GetResult();
+            return ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() =>
+                VerifyPolylineFeatureClassInternal(fcPath, expectedCount, expectedWkid)
+            ).GetAwaiter().GetResult();
         }
         catch (Exception ex)
         {
@@ -2806,6 +2941,321 @@ public static class GdbFeatureClassService
                                $"✔ Reports: verified in '{reportsDir}'";
         return (true, reportSummary);
     }
+
+    /// <summary>
+    /// Async version of VerifyFinalExport to safely run without blocking the calling thread.
+    /// </summary>
+    public static async Task<(bool Ok, string Report)> VerifyFinalExportAsync(string finalDir, int expectedParcelCount, int expectedBorderCount, int expectedWkid)
+    {
+        if (string.IsNullOrWhiteSpace(finalDir) || !Directory.Exists(finalDir))
+            return (false, $"Final export directory does not exist: {finalDir}");
+
+        var issues = new List<string>();
+
+        // 1. GDB Deliverable
+        string finalGdb = Path.Combine(finalDir, "Final.gdb");
+        if (!Directory.Exists(finalGdb))
+        {
+            issues.Add($"Final.gdb does not exist at '{finalGdb}'.");
+        }
+        else
+        {
+            var (pOk, pReason) = await VerifyPolygonFeatureClassAsync(Path.Combine(finalGdb, "PARCEL"), expectedParcelCount, expectedWkid);
+            if (!pOk) issues.Add($"Final.gdb PARCEL verification failed: {pReason}");
+
+            if (expectedBorderCount > 0)
+            {
+                var (bOk, bReason) = await VerifyPolylineFeatureClassAsync(Path.Combine(finalGdb, "BORDER"), expectedBorderCount, expectedWkid);
+                if (!bOk) issues.Add($"Final.gdb BORDER verification failed: {bReason}");
+            }
+        }
+
+        // 2. Shapefile Deliverables
+        string shapeDir = Path.Combine(finalDir, "Shape");
+        string[] requiredExtensions = new[] { ".shp", ".shx", ".dbf", ".prj", ".cpg" };
+
+        string parcelShpBase = Path.Combine(shapeDir, "PARCEL");
+        foreach (var ext in requiredExtensions)
+        {
+            string f = parcelShpBase + ext;
+            if (!File.Exists(f)) issues.Add($"Missing required shapefile component: {Path.GetFileName(f)}");
+        }
+
+        if (expectedBorderCount > 0)
+        {
+            string borderShpBase = Path.Combine(shapeDir, "BORDER");
+            foreach (var ext in requiredExtensions)
+            {
+                string f = borderShpBase + ext;
+                if (!File.Exists(f)) issues.Add($"Missing required border shapefile component: {Path.GetFileName(f)}");
+            }
+        }
+
+        // 3. Reports Deliverable
+        string reportsDir = Path.Combine(finalDir, "Reports");
+        if (!Directory.Exists(reportsDir))
+        {
+            issues.Add($"Reports folder does not exist at '{reportsDir}'.");
+        }
+        else
+        {
+            bool hasAnyReport = Directory.EnumerateFiles(reportsDir).Any();
+            if (!hasAnyReport) issues.Add("Reports folder is empty.");
+        }
+
+        if (issues.Count > 0)
+        {
+            return (false, string.Join(Environment.NewLine, issues));
+        }
+
+        string reportSummary = $"✔ Final.gdb: PARCEL ({expectedParcelCount}), BORDER ({expectedBorderCount})\n" +
+                               $"✔ Shape: PARCEL.shp, BORDER.shp (with all .shp/.shx/.dbf/.prj/.cpg sidecars)\n" +
+                               $"✔ Reports: verified in '{reportsDir}'";
+        return (true, reportSummary);
+    }
+
+    /// <summary>
+    /// Computes content stamp of a GDB feature class directly from its data (count + hash of attributes/geometries),
+    /// completely immune to unrelated file or lock modifications in the .gdb directory.
+    /// </summary>
+    public static string ComputeFeatureClassContentStamp(string fcPath)
+    {
+        if (string.IsNullOrWhiteSpace(fcPath)) return string.Empty;
+        try
+        {
+            string? dir = Path.GetDirectoryName(fcPath);
+            string fcName = Path.GetFileName(fcPath);
+            string gdbDir = dir ?? "";
+            if (!gdbDir.EndsWith(".gdb", StringComparison.OrdinalIgnoreCase) && gdbDir.Contains(".gdb"))
+            {
+                int gdbIdx = gdbDir.IndexOf(".gdb", StringComparison.OrdinalIgnoreCase);
+                gdbDir = gdbDir.Substring(0, gdbIdx + 4);
+            }
+
+            if (!Directory.Exists(gdbDir)) return string.Empty;
+
+            if (ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.OnWorker)
+            {
+                return ComputeFeatureClassContentStampInternal(gdbDir, fcName);
+            }
+            return ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() =>
+                ComputeFeatureClassContentStampInternal(gdbDir, fcName)
+            ).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ComputeContentStamp] Error: {ex.Message}");
+            return string.Empty;
+        }
+    }
+
+    private static string ComputeFeatureClassContentStampInternal(string gdbDir, string fcName)
+    {
+        try
+        {
+            using var gdb = new Geodatabase(new FileGeodatabaseConnectionPath(new Uri(gdbDir)));
+            using var fc = OpenDatasetFeatureClass(gdb, fcName);
+            if (fc == null) return string.Empty;
+
+            long count = fc.GetCount();
+            var def = fc.GetDefinition();
+            int oidIdx = def.FindField(def.GetObjectIDField());
+            int plotIdIdx = def.FindField("PLOT_ID");
+            int usageIdx = def.FindField("USAGE");
+            int remIdx = def.FindField("REMARKS");
+            int areaIdx = def.FindField("AREA_SQM");
+
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            var sb = new System.Text.StringBuilder();
+            sb.Append($"Count:{count};");
+
+            using var cursor = fc.Search(null, false);
+            while (cursor.MoveNext())
+            {
+                using var row = (Feature)cursor.Current;
+                long oid = oidIdx >= 0 ? Convert.ToInt64(row[oidIdx] ?? 0) : 0;
+                string pid = plotIdIdx >= 0 ? row[plotIdIdx]?.ToString() ?? "" : "";
+                string usg = usageIdx >= 0 ? row[usageIdx]?.ToString() ?? "" : "";
+                string rem = remIdx >= 0 ? row[remIdx]?.ToString() ?? "" : "";
+                double area = areaIdx >= 0 ? Convert.ToDouble(row[areaIdx] ?? 0) : 0;
+
+                sb.Append($"{oid}|{pid}|{usg}|{rem}|{area:F2};");
+                var shape = row.GetShape();
+                if (shape != null && !shape.IsEmpty)
+                {
+                    var c = shape.Extent.Center;
+                    sb.Append($"{shape.PointCount}|{c.X:F3}|{c.Y:F3};");
+                }
+            }
+
+            byte[] hash = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(sb.ToString()));
+            return $"{count}_{Convert.ToHexString(hash)[..16]}";
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ComputeContentStampInternal] Error: {ex.Message}");
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// QA Check: Verifies that Step 3's output (PARCEL_Approved_Schema) contains exactly the template fields
+    /// and that no temporary working fields (SRC_LAYER, PARCEL_CLS, PROV, etc.) leaked into it.
+    /// </summary>
+    public static async Task<(bool Ok, List<string> ExtraneousFields)> VerifyExactTemplateSchemaAsync(string gdbPath, string fcName)
+    {
+        var extraneous = new List<string>();
+        string[] workingFields = new[] { "SRC_LAYER", "SRC_LAYERS", "PARCEL_CLS", "PLOT_TXT", "PLOT_LYR", "USAGE_TXT", "USAGE_LYR", "LYR_USAGE", "MATCH_MODE", "PROV" };
+
+        await ArcGIS.Desktop.Framework.Threading.Tasks.QueuedTask.Run(() =>
+        {
+            using var gdb = new Geodatabase(new FileGeodatabaseConnectionPath(new Uri(gdbPath)));
+            using var fc = gdb.OpenDataset<FeatureClass>(fcName);
+            if (fc == null) return;
+            var def = fc.GetDefinition();
+            foreach (var wf in workingFields)
+            {
+                if (def.FindField(wf) >= 0)
+                {
+                    extraneous.Add(wf);
+                }
+            }
+        });
+
+        return (extraneous.Count == 0, extraneous);
+    }
+
+    /// <summary>
+    /// Checks whether the specified field exists in the dataset (Feature Layer, Feature Class, or Shapefile).
+    /// Safe to call; returns false if the dataset or field cannot be found.
+    /// Must be called within QueuedTask when accessing ArcGIS Pro Geodatabase objects.
+    /// </summary>
+    public static bool HasField(string pathOrFolder, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(pathOrFolder) || string.IsNullOrWhiteSpace(fieldName))
+            return false;
+
+        try
+        {
+            // 1. Check if pathOrFolder points to an active Feature Layer in ArcGIS Pro Map Contents
+            var map = MapView.Active?.Map;
+            if (map != null)
+            {
+                var fl = map.GetLayersAsFlattenedList().OfType<FeatureLayer>()
+                    .FirstOrDefault(l => l.Name.Equals(pathOrFolder, StringComparison.OrdinalIgnoreCase));
+                if (fl != null)
+                {
+                    using var fc = fl.GetFeatureClass();
+                    if (fc != null)
+                    {
+                        var def = fc.GetDefinition();
+                        return def != null && def.FindField(fieldName) >= 0;
+                    }
+                }
+            }
+        }
+        catch { }
+
+        // 2. Check if pathOrFolder is a direct Feature Class path inside a GDB, e.g. "C:\Path\Data.gdb\FeatureClassName"
+        int gdbIdx = pathOrFolder.IndexOf(".gdb", StringComparison.OrdinalIgnoreCase);
+        if (gdbIdx >= 0)
+        {
+            try
+            {
+                string gdbPath = pathOrFolder.Substring(0, gdbIdx + 4);
+                string remainder = pathOrFolder.Substring(gdbIdx + 4).TrimStart('\\', '/');
+                string fcName = !string.IsNullOrWhiteSpace(remainder) ? remainder : "PARCEL";
+
+                if (Directory.Exists(gdbPath))
+                {
+                    using var gdb = new Geodatabase(new FileGeodatabaseConnectionPath(new Uri(gdbPath)));
+                    string targetFc = fcName;
+                    try
+                    {
+                        var fcDefs = gdb.GetDefinitions<FeatureClassDefinition>();
+                        if (!fcDefs.Any(d => d.GetName().Equals(fcName, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            var polyDef = fcDefs.FirstOrDefault(d => d.GetShapeType() == GeometryType.Polygon);
+                            if (polyDef != null) targetFc = polyDef.GetName();
+                        }
+                    }
+                    catch { }
+
+                    using var fc = gdb.OpenDataset<FeatureClass>(targetFc);
+                    if (fc != null)
+                    {
+                        var def = fc.GetDefinition();
+                        return def != null && def.FindField(fieldName) >= 0;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // 3. Check if folder contains Cad2Gis_Workspace.gdb, Export_Deliverables.gdb or candidate shapefiles
+        string targetPath = pathOrFolder;
+        if (Directory.Exists(pathOrFolder) && !pathOrFolder.EndsWith(".gdb", StringComparison.OrdinalIgnoreCase))
+        {
+            string deliverableGdb = Path.Combine(pathOrFolder, "Cad2Gis_Workspace.gdb");
+            if (!Directory.Exists(deliverableGdb))
+            {
+                deliverableGdb = Path.Combine(pathOrFolder, "Export_Deliverables.gdb");
+            }
+
+            if (Directory.Exists(deliverableGdb))
+            {
+                try
+                {
+                    using var gdb = new Geodatabase(new FileGeodatabaseConnectionPath(new Uri(deliverableGdb)));
+                    using var fc = gdb.OpenDataset<FeatureClass>("PARCEL");
+                    if (fc != null)
+                    {
+                        var def = fc.GetDefinition();
+                        return def != null && def.FindField(fieldName) >= 0;
+                    }
+                }
+                catch { }
+            }
+
+            string candidate = Path.Combine(pathOrFolder, "PARCEL.shp");
+            if (File.Exists(candidate)) targetPath = candidate;
+        }
+
+        if (targetPath.EndsWith(".gdb", StringComparison.OrdinalIgnoreCase) || (Directory.Exists(targetPath) && targetPath.EndsWith(".gdb", StringComparison.OrdinalIgnoreCase)))
+        {
+            try
+            {
+                using var gdb = new Geodatabase(new FileGeodatabaseConnectionPath(new Uri(targetPath)));
+                using var fc = gdb.OpenDataset<FeatureClass>("PARCEL");
+                if (fc != null)
+                {
+                    var def = fc.GetDefinition();
+                    return def != null && def.FindField(fieldName) >= 0;
+                }
+            }
+            catch { }
+        }
+
+        if (File.Exists(targetPath))
+        {
+            try
+            {
+                string folder = Path.GetDirectoryName(targetPath)!;
+                string fileName = Path.GetFileName(targetPath);
+                var fileConn = new FileSystemConnectionPath(new Uri(folder), FileSystemDatastoreType.Shapefile);
+                using var datastore = new FileSystemDatastore(fileConn);
+                using var fc = datastore.OpenDataset<FeatureClass>(fileName);
+                if (fc != null)
+                {
+                    var def = fc.GetDefinition();
+                    return def != null && def.FindField(fieldName) >= 0;
+                }
+            }
+            catch { }
+        }
+
+        return false;
+    }
 }
 
 public class DatasetCadFeatures
@@ -2814,6 +3264,13 @@ public class DatasetCadFeatures
     public List<LineGeometry2D> LinesToPolygonize { get; } = new();
     public List<CurvePolylineEntity> CurveEntitiesToPolygonize { get; } = new();
     public List<(string Text, MapPoint Location, string LayerName)> Annotations { get; } = new();
+
+    public List<string> DiscoveredFeatureClasses { get; } = new();
+    public Dictionary<string, List<string>> FeatureClassTextFields { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public string? AnnotationsSpatialReferenceWkid { get; set; }
+    public string? AnnotationsSpatialReferenceName { get; set; }
+    public Envelope? AnnotationsExtent { get; set; }
+    public Exception? ReadException { get; set; }
 }
 
 public class FeatureToPolygonReport

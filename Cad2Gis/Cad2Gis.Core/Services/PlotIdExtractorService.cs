@@ -20,14 +20,14 @@ public class PlotIdMatchReport
 }
 
 /// <summary>
-/// Service responsible for extracting and resolving PLOT_ID from user-chosen CAD PlotText layers
-/// and assigning them to parcel polygons with strict priority and spatial proximity fallback.
+/// Service responsible for extracting and resolving PLOT_ID and USAGE_TXT/REMARKS
+/// from user-chosen CAD PlotText and UsageText layers, with strict priority and diagnostics.
 /// </summary>
 public static class PlotIdExtractorService
 {
     /// <summary>
     /// Resolves the clean layer name of the chosen PlotText layer from the UI selection label.
-    /// Strips any UI badge suffix like " (★ PlotText)".
+    /// Strips any UI badge suffix like " (★ PlotText)" and ensures placeholders are treated as null.
     /// </summary>
     public static string? CleanLayerName(string? rawLayerLabel)
     {
@@ -35,6 +35,11 @@ public static class PlotIdExtractorService
         string trimmed = rawLayerLabel.Trim();
         if (trimmed.StartsWith("(") && trimmed.EndsWith(")")) return null;
         if (trimmed.Contains("تلقائي")) return null;
+        if (trimmed.Equals("none", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("none selected", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("(none selected)", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("(none)", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("(لا يوجد)", StringComparison.OrdinalIgnoreCase)) return null;
 
         int starIdx = trimmed.IndexOf(" (★", StringComparison.Ordinal);
         if (starIdx > 0)
@@ -46,7 +51,7 @@ public static class PlotIdExtractorService
     }
 
     /// <summary>
-    /// Checks whether a given text string looks like a cadastral plot number (e.g. numeric, fractions like 12/1, or with prefix).
+    /// Checks whether a given text string looks like a cadastral plot number (e.g. numeric, alphanumeric like 105/A, fractions like 12/1, or with prefix).
     /// </summary>
     public static bool IsPlotNumberText(string? text)
     {
@@ -54,6 +59,11 @@ public static class PlotIdExtractorService
         string t = text.Trim();
         if (t.All(c => char.IsDigit(c) || c == '/' || c == '-' || c == ' ' || c == '.' || c == '\\')) return true;
         if (t.StartsWith("قطعة", StringComparison.OrdinalIgnoreCase) || t.StartsWith("رقم", StringComparison.OrdinalIgnoreCase)) return true;
+        // Check for subdivided plot notation e.g. "105/A", "105/أ", "105-A", "A/105" (must contain at least one digit and <= 10 chars)
+        if (t.Any(char.IsDigit) && t.Length <= 10 && t.All(c => char.IsLetterOrDigit(c) || c == '/' || c == '-' || c == ' ' || c == '.' || c == '\\'))
+        {
+            return true;
+        }
         return false;
     }
 
@@ -70,11 +80,305 @@ public static class PlotIdExtractorService
     }
 
     /// <summary>
-    /// Matches and assigns PLOT_ID to parcels from spatial annotations with strict precedence:
-    /// 1. Exact match from user-selected PlotText layer inside the parcel.
-    /// 2. If multiple inside the parcel, prefer one matching IsPlotNumberText, or first non-empty.
-    /// 3. Match from secondary PlotText layers inside the parcel.
-    /// 4. Proximity matching for remaining parcels from the user-selected PlotText layer.
+    /// Performs robust text joining for both PLOT_ID and USAGE_TXT/REMARKS according to strict cadastral rules.
+    /// Produces a comprehensive TextJoinReport.
+    /// </summary>
+    public static TextJoinReport PerformTextJoin(
+        IReadOnlyList<ParcelRecord> parcels,
+        IReadOnlyDictionary<long, List<(string Text, string LayerName)>> parcelInsideAnnots,
+        IEnumerable<(string Text, double X, double Y, string LayerName)> allAnnots,
+        IReadOnlyDictionary<long, (double CenterX, double CenterY)> parcelCenters,
+        string? explicitPlotLayer,
+        ISet<string>? secondaryPlotLayers = null,
+        ISet<string>? usageLayers = null,
+        double maxProximityMeters = 1.0,
+        bool enableProximityFallback = false,
+        Func<long, double, double, double>? distanceToParcelFunc = null)
+    {
+        string? cleanPlotLayer = CleanLayerName(explicitPlotLayer);
+        var activePlotLayers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrEmpty(cleanPlotLayer)) activePlotLayers.Add(cleanPlotLayer);
+        if (secondaryPlotLayers != null)
+        {
+            foreach (var s in secondaryPlotLayers)
+            {
+                string? cs = CleanLayerName(s);
+                if (!string.IsNullOrEmpty(cs)) activePlotLayers.Add(cs);
+            }
+        }
+
+        var activeUsageLayers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (usageLayers != null)
+        {
+            foreach (var u in usageLayers)
+            {
+                string? cu = CleanLayerName(u);
+                if (!string.IsNullOrEmpty(cu)) activeUsageLayers.Add(cu);
+            }
+        }
+
+        var report = new TextJoinReport
+        {
+            TotalParcels = parcels.Count,
+            SelectedPlotTextLayer = cleanPlotLayer ?? string.Empty,
+            SelectedUsageTextLayers = activeUsageLayers.OrderBy(x => x).ToList()
+        };
+
+        // Initialize layer stats for each active layer
+        var layerStatsMap = new Dictionary<string, LayerAnnotationStats>(StringComparer.OrdinalIgnoreCase);
+        foreach (var l in activePlotLayers)
+        {
+            layerStatsMap[l] = new LayerAnnotationStats { LayerName = l, Role = "PlotText" };
+        }
+        foreach (var u in activeUsageLayers)
+        {
+            if (!layerStatsMap.ContainsKey(u))
+            {
+                layerStatsMap[u] = new LayerAnnotationStats { LayerName = u, Role = "UsageText" };
+            }
+        }
+
+        var allAnnotList = allAnnots?.Where(a => !string.IsNullOrWhiteSpace(a.Text)).ToList() 
+                           ?? new List<(string Text, double X, double Y, string LayerName)>();
+
+        // Count annotations read
+        foreach (var a in allAnnotList)
+        {
+            if (layerStatsMap.TryGetValue(a.LayerName, out var ls))
+            {
+                ls.AnnotationsRead++;
+            }
+        }
+
+        // Count annotations inside polygons
+        foreach (var kvp in parcelInsideAnnots)
+        {
+            foreach (var insideItem in kvp.Value)
+            {
+                if (layerStatsMap.TryGetValue(insideItem.LayerName, out var ls))
+                {
+                    ls.AnnotationsInsidePolygon++;
+                }
+            }
+        }
+
+        var plotTextToParcelsMap = new Dictionary<string, List<long>>(StringComparer.OrdinalIgnoreCase);
+
+        // Process each parcel
+        foreach (var p in parcels)
+        {
+            // Reset fields
+            p.PlotId = string.Empty;
+            p.PlotNo1 = string.Empty;
+            p.PlotText = string.Empty;
+            p.PlotLayer = string.Empty;
+            p.MatchMode = "None";
+
+            var center = parcelCenters.TryGetValue(p.InternalId, out var c) ? c : (CenterX: p.CentroidX, CenterY: p.CentroidY);
+
+            // 1. PLOT_ID Resolution (Only from active PlotText layers!)
+            if (activePlotLayers.Count > 0 && parcelInsideAnnots.TryGetValue(p.InternalId, out var inside) && inside.Count > 0)
+            {
+                // Gather candidates from active PlotText layers that match plot number criteria
+                // Exclude any layers that belong to active usage layers
+                var plotCandidates = inside
+                    .Where(a => activePlotLayers.Contains(a.LayerName) && !activeUsageLayers.Contains(a.LayerName))
+                    .Where(a => IsPlotNumberText(a.Text))
+                    .ToList();
+
+                // 1. Priority: If explicit layer was specified and has annotations inside, restrict to explicit layer
+                if (!string.IsNullOrEmpty(cleanPlotLayer))
+                {
+                    var explicitCandidates = inside
+                        .Where(a => a.LayerName.Equals(cleanPlotLayer, StringComparison.OrdinalIgnoreCase) && !activeUsageLayers.Contains(a.LayerName))
+                        .ToList();
+                    if (explicitCandidates.Count > 0)
+                    {
+                        var explicitPlotNums = explicitCandidates.Where(a => IsPlotNumberText(a.Text)).ToList();
+                        plotCandidates = explicitPlotNums.Count > 0 ? explicitPlotNums : explicitCandidates;
+                    }
+                    else
+                    {
+                        // Explicit layer selected by user had 0 matches inside this parcel
+                        // Only fall back to secondary layers if no explicit layer or if secondary layers enabled
+                        plotCandidates = new List<(string Text, string LayerName)>();
+                    }
+                }
+
+                if (plotCandidates.Count == 1)
+                {
+                    var single = plotCandidates[0];
+                    p.PlotId = single.Text.Trim();
+                    p.PlotNo1 = p.PlotId;
+                    p.PlotText = single.Text.Trim();
+                    p.PlotLayer = single.LayerName.Trim();
+                    p.MatchMode = "Contains";
+
+                    if (layerStatsMap.TryGetValue(single.LayerName, out var ls)) ls.AnnotationsUsed++;
+                }
+                else if (plotCandidates.Count > 1)
+                {
+                    // Conflict: multiple candidate texts inside the parcel polygon
+                    // Deterministic choice: closest to parcel centroid, then smaller value
+                    var sorted = plotCandidates
+                        .Select(cand =>
+                        {
+                            // Find distance to centroid if coordinate available
+                            var annotLoc = allAnnotList.FirstOrDefault(a => a.LayerName.Equals(cand.LayerName, StringComparison.OrdinalIgnoreCase) && a.Text.Trim().Equals(cand.Text.Trim(), StringComparison.OrdinalIgnoreCase));
+                            double dist = annotLoc.Text != null
+                                ? Math.Sqrt(Math.Pow(annotLoc.X - center.CenterX, 2) + Math.Pow(annotLoc.Y - center.CenterY, 2))
+                                : 0.0;
+                            return (Candidate: cand, Distance: dist);
+                        })
+                        .OrderBy(x => x.Distance)
+                        .ThenBy(x => x.Candidate.Text.Trim(), StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+
+                    var best = sorted[0].Candidate;
+                    p.PlotId = best.Text.Trim();
+                    p.PlotNo1 = p.PlotId;
+                    p.PlotText = best.Text.Trim();
+                    p.PlotLayer = best.LayerName.Trim();
+                    p.MatchMode = "Conflict";
+
+                    string conflictDesc = $"Parcel ID {p.InternalId}: multiple candidates [{string.Join(", ", plotCandidates.Select(c => $"'{c.Text}'({c.LayerName})"))}] -> chose '{best.Text}'";
+                    report.ParcelsWithConflicts.Add(conflictDesc);
+
+                    if (layerStatsMap.TryGetValue(best.LayerName, out var ls)) ls.AnnotationsUsed++;
+                }
+            }
+
+            // Fallback to Proximity (only if enabled and still unmatched)
+            if (enableProximityFallback && string.IsNullOrEmpty(p.PlotId) && activePlotLayers.Count > 0)
+            {
+                var targetPlotAnnots = allAnnotList
+                    .Where(a => activePlotLayers.Contains(a.LayerName) && !activeUsageLayers.Contains(a.LayerName) && IsPlotNumberText(a.Text))
+                    .ToList();
+
+                if (!string.IsNullOrEmpty(cleanPlotLayer))
+                {
+                    var exp = targetPlotAnnots.Where(a => a.LayerName.Equals(cleanPlotLayer, StringComparison.OrdinalIgnoreCase)).ToList();
+                    if (exp.Count > 0) targetPlotAnnots = exp;
+                }
+
+                if (targetPlotAnnots.Count > 0)
+                {
+                    var nearest = targetPlotAnnots
+                        .Select(a => new
+                        {
+                            Annot = a,
+                            Dist = distanceToParcelFunc != null
+                                ? distanceToParcelFunc(p.InternalId, a.X, a.Y)
+                                : Math.Sqrt(Math.Pow(a.X - center.CenterX, 2) + Math.Pow(a.Y - center.CenterY, 2))
+                        })
+                        .Where(x => x.Dist <= maxProximityMeters)
+                        .OrderBy(x => x.Dist)
+                        .ThenBy(x => x.Annot.Text.Trim(), StringComparer.OrdinalIgnoreCase)
+                        .FirstOrDefault();
+
+                    if (nearest != null)
+                    {
+                        p.PlotId = nearest.Annot.Text.Trim();
+                        p.PlotNo1 = p.PlotId;
+                        p.PlotText = nearest.Annot.Text.Trim();
+                        p.PlotLayer = nearest.Annot.LayerName.Trim();
+                        p.MatchMode = "Nearest";
+
+                        if (layerStatsMap.TryGetValue(nearest.Annot.LayerName, out var ls)) ls.AnnotationsUsed++;
+                    }
+                }
+            }
+
+            // Track duplicate usage of the same plot text across parcels
+            if (!string.IsNullOrEmpty(p.PlotId))
+            {
+                if (!plotTextToParcelsMap.TryGetValue(p.PlotId, out var pList))
+                {
+                    pList = new List<long>();
+                    plotTextToParcelsMap[p.PlotId] = pList;
+                }
+                pList.Add(p.InternalId);
+            }
+            else
+            {
+                report.ParcelsWithoutPlotText.Add($"Parcel ID {p.InternalId} (Class: {p.Class}, Area: {p.AreaSqm:F1} m²)");
+            }
+
+            report.CountsByMatchMode[p.MatchMode]++;
+
+            // 2. USAGE_TXT and REMARKS Resolution (from active UsageText layers)
+            if (activeUsageLayers.Count > 0)
+            {
+                if (parcelInsideAnnots.TryGetValue(p.InternalId, out var insideU) && insideU.Count > 0)
+                {
+                    var usageInside = insideU
+                        .Where(a => activeUsageLayers.Contains(a.LayerName) && !IsPlotNumberText(a.Text))
+                        .Select(a => (Text: a.Text.Trim(), Layer: a.LayerName.Trim()))
+                        .Where(x => !string.IsNullOrWhiteSpace(x.Text))
+                        .Distinct()
+                        .ToList();
+
+                    if (usageInside.Count > 0)
+                    {
+                        p.UsageText = string.Join(" - ", usageInside.Select(x => x.Text));
+                        p.Remarks = p.UsageText;
+                        p.UsageLayer = string.Join(";", usageInside.Select(x => x.Layer).Distinct());
+
+                        foreach (var uItem in usageInside)
+                        {
+                            if (layerStatsMap.TryGetValue(uItem.Layer, out var ls)) ls.AnnotationsUsed++;
+                        }
+                    }
+                }
+
+                // Proximity fallback for Usage if enabled
+                if (enableProximityFallback && string.IsNullOrWhiteSpace(p.UsageText))
+                {
+                    var targetUsageAnnots = allAnnotList
+                        .Where(a => activeUsageLayers.Contains(a.LayerName) && !IsPlotNumberText(a.Text))
+                        .ToList();
+
+                    if (targetUsageAnnots.Count > 0)
+                    {
+                        var nearestU = targetUsageAnnots
+                            .Select(a => new
+                            {
+                                a.Text,
+                                a.LayerName,
+                                Dist = Math.Sqrt(Math.Pow(a.X - center.CenterX, 2) + Math.Pow(a.Y - center.CenterY, 2))
+                            })
+                            .Where(x => x.Dist <= 15.0)
+                            .OrderBy(x => x.Dist)
+                            .FirstOrDefault();
+
+                        if (nearestU != null)
+                        {
+                            p.UsageText = nearestU.Text.Trim();
+                            p.Remarks = nearestU.Text.Trim();
+                            p.UsageLayer = nearestU.LayerName.Trim();
+
+                            if (layerStatsMap.TryGetValue(nearestU.LayerName, out var ls)) ls.AnnotationsUsed++;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Duplicate plot texts check
+        foreach (var kvp in plotTextToParcelsMap)
+        {
+            if (kvp.Value.Count > 1)
+            {
+                report.DuplicateTextsUsedAcrossParcels.Add($"Plot text '{kvp.Key}' used by {kvp.Value.Count} parcels: [{string.Join(", ", kvp.Value)}]");
+            }
+        }
+
+        report.LayerStats = layerStatsMap.Values.ToList();
+        return report;
+    }
+
+    /// <summary>
+    /// Backward-compatible overload for AssignPlotIds that delegates to PerformTextJoin.
     /// </summary>
     public static PlotIdMatchReport AssignPlotIds(
         IReadOnlyList<ParcelRecord> parcels,
@@ -87,191 +391,26 @@ public static class PlotIdExtractorService
         double maxProximityMeters = 1.0,
         Func<long, double, double, double>? distanceToParcelFunc = null)
     {
-        var report = new PlotIdMatchReport
+        var joinReport = PerformTextJoin(
+            parcels,
+            parcelInsideAnnots,
+            allAnnots,
+            parcelCenters,
+            explicitPlotLayer,
+            secondaryPlotLayers,
+            usageLayers,
+            maxProximityMeters,
+            enableProximityFallback: true,
+            distanceToParcelFunc);
+
+        return new PlotIdMatchReport
         {
-            SelectedPlotLayer = explicitPlotLayer ?? "(Auto)",
-            TotalParcels = parcels.Count
+            SelectedPlotLayer = joinReport.SelectedPlotTextLayer,
+            TotalParcels = joinReport.TotalParcels,
+            MatchedFromSelectedLayer = joinReport.CountsByMatchMode.GetValueOrDefault("Contains", 0),
+            MatchedFromSecondaryLayers = joinReport.CountsByMatchMode.GetValueOrDefault("Conflict", 0),
+            MatchedViaProximity = joinReport.CountsByMatchMode.GetValueOrDefault("Nearest", 0),
+            FallbackDummyIds = joinReport.CountsByMatchMode.GetValueOrDefault("None", 0)
         };
-
-        if (parcels.Count == 0) return report;
-
-        string? targetExplicit = CleanLayerName(explicitPlotLayer);
-        var secondarySet = new HashSet<string>(secondaryPlotLayers ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
-        var usageSet = new HashSet<string>(usageLayers ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
-
-        var matchedParcelIds = new HashSet<long>();
-        var usedPlotTexts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        // Phase 1: Inside Parcel Matching with Strict Priority
-        foreach (var p in parcels)
-        {
-            if (!parcelInsideAnnots.TryGetValue(p.InternalId, out var inside) || inside.Count == 0)
-                continue;
-
-            // 1. Priority 1: User's explicitly chosen PlotText layer
-            if (!string.IsNullOrEmpty(targetExplicit))
-            {
-                var explicitAnnots = inside.Where(a => a.LayerName.Equals(targetExplicit, StringComparison.OrdinalIgnoreCase)).ToList();
-                if (explicitAnnots.Count > 0)
-                {
-                    var best = explicitAnnots.FirstOrDefault(a => IsPlotNumberText(a.Text) && !usageSet.Contains(a.LayerName));
-                    if (string.IsNullOrWhiteSpace(best.Text))
-                    {
-                        best = explicitAnnots.FirstOrDefault(a => !usageSet.Contains(a.LayerName));
-                    }
-                    if (string.IsNullOrWhiteSpace(best.Text))
-                    {
-                        best = explicitAnnots[0];
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(best.Text))
-                    {
-                        p.PlotId = best.Text.Trim();
-                        matchedParcelIds.Add(p.InternalId);
-                        usedPlotTexts.Add(p.PlotId);
-                        report.MatchedFromSelectedLayer++;
-                        continue;
-                    }
-                }
-            }
-
-            // 2. Priority 2: Secondary PlotText layers
-            if (secondarySet.Count > 0)
-            {
-                var secondaryAnnots = inside.Where(a => secondarySet.Contains(a.LayerName)).ToList();
-                if (secondaryAnnots.Count > 0)
-                {
-                    var best = secondaryAnnots.FirstOrDefault(a => IsPlotNumberText(a.Text) && !usageSet.Contains(a.LayerName));
-                    if (string.IsNullOrWhiteSpace(best.Text))
-                    {
-                        best = secondaryAnnots.FirstOrDefault(a => !usageSet.Contains(a.LayerName));
-                    }
-                    if (string.IsNullOrWhiteSpace(best.Text))
-                    {
-                        best = secondaryAnnots[0];
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(best.Text))
-                    {
-                        p.PlotId = best.Text.Trim();
-                        matchedParcelIds.Add(p.InternalId);
-                        usedPlotTexts.Add(p.PlotId);
-                        report.MatchedFromSecondaryLayers++;
-                        continue;
-                    }
-                }
-            }
-
-            // 3. Priority 3: Any text matching plot number format that is not in a usage layer
-            var plotFormatAnnot = inside.FirstOrDefault(a => !usageSet.Contains(a.LayerName) && IsPlotNumberText(a.Text));
-            if (!string.IsNullOrWhiteSpace(plotFormatAnnot.Text))
-            {
-                p.PlotId = plotFormatAnnot.Text.Trim();
-                matchedParcelIds.Add(p.InternalId);
-                usedPlotTexts.Add(p.PlotId);
-                report.MatchedFromSecondaryLayers++;
-                continue;
-            }
-
-            // 4. Priority 4: Any non-usage text inside the parcel if parcel has a dummy ID
-            if (p.PlotId.StartsWith("P", StringComparison.OrdinalIgnoreCase) && int.TryParse(p.PlotId.Substring(1), out _))
-            {
-                var nonUsage = inside.FirstOrDefault(a => !usageSet.Contains(a.LayerName) && !IsUsageText(a.Text));
-                if (!string.IsNullOrWhiteSpace(nonUsage.Text))
-                {
-                    p.PlotId = nonUsage.Text.Trim();
-                    matchedParcelIds.Add(p.InternalId);
-                    usedPlotTexts.Add(p.PlotId);
-                    report.MatchedFromSecondaryLayers++;
-                }
-            }
-        }
-
-        // Phase 2: Proximity Matching for Unmatched Parcels
-        var remainingParcels = parcels.Where(p => !matchedParcelIds.Contains(p.InternalId)).ToList();
-        if (remainingParcels.Count > 0 && allAnnots != null)
-        {
-            var annotList = allAnnots.Where(a => !string.IsNullOrWhiteSpace(a.Text)).ToList();
-
-            // A. Proximity from the user's chosen PlotText layer first!
-            if (!string.IsNullOrEmpty(targetExplicit))
-            {
-                var targetExplicitAnnots = annotList
-                    .Where(a => a.LayerName.Equals(targetExplicit, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-
-                if (targetExplicitAnnots.Count > 0)
-                {
-                    foreach (var p in remainingParcels)
-                    {
-                        if (matchedParcelIds.Contains(p.InternalId)) continue;
-                        if (!parcelCenters.TryGetValue(p.InternalId, out var center)) continue;
-
-                        var closest = targetExplicitAnnots
-                            .Where(a => !usedPlotTexts.Contains(a.Text.Trim()))
-                            .Select(a => new
-                            {
-                                Text = a.Text.Trim(),
-                                Dist = distanceToParcelFunc != null
-                                    ? distanceToParcelFunc(p.InternalId, a.X, a.Y)
-                                    : Math.Sqrt(Math.Pow(a.X - center.CenterX, 2) + Math.Pow(a.Y - center.CenterY, 2))
-                            })
-                            .Where(x => x.Dist <= maxProximityMeters)
-                            .OrderBy(x => x.Dist)
-                            .FirstOrDefault();
-
-                        if (closest != null)
-                        {
-                            p.PlotId = closest.Text;
-                            matchedParcelIds.Add(p.InternalId);
-                            usedPlotTexts.Add(p.PlotId);
-                            report.MatchedViaProximity++;
-                        }
-                    }
-                }
-            }
-
-            // B. Proximity from secondary plot layers if still unmatched
-            var stillUnmatched = remainingParcels.Where(p => !matchedParcelIds.Contains(p.InternalId)).ToList();
-            if (stillUnmatched.Count > 0 && secondarySet.Count > 0)
-            {
-                var secondaryCandidates = annotList
-                    .Where(a => secondarySet.Contains(a.LayerName) && IsPlotNumberText(a.Text))
-                    .ToList();
-
-                if (secondaryCandidates.Count > 0)
-                {
-                    foreach (var p in stillUnmatched)
-                    {
-                        if (matchedParcelIds.Contains(p.InternalId)) continue;
-                        if (!parcelCenters.TryGetValue(p.InternalId, out var center)) continue;
-
-                        var closest = secondaryCandidates
-                            .Where(a => !usedPlotTexts.Contains(a.Text.Trim()))
-                            .Select(a => new
-                            {
-                                Text = a.Text.Trim(),
-                                Dist = distanceToParcelFunc != null
-                                    ? distanceToParcelFunc(p.InternalId, a.X, a.Y)
-                                    : Math.Sqrt(Math.Pow(a.X - center.CenterX, 2) + Math.Pow(a.Y - center.CenterY, 2))
-                            })
-                            .Where(x => x.Dist <= maxProximityMeters)
-                            .OrderBy(x => x.Dist)
-                            .FirstOrDefault();
-
-                        if (closest != null)
-                        {
-                            p.PlotId = closest.Text;
-                            matchedParcelIds.Add(p.InternalId);
-                            usedPlotTexts.Add(p.PlotId);
-                            report.MatchedViaProximity++;
-                        }
-                    }
-                }
-            }
-        }
-
-        report.FallbackDummyIds = parcels.Count - matchedParcelIds.Count;
-        return report;
     }
 }

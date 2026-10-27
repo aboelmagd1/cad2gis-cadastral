@@ -20,6 +20,7 @@ public class ValidationIssue
 public class ValidationResult
 {
     public bool IsValid => Errors.Count == 0;
+    public int TotalIssues => Errors.Count + Warnings.Count;
     public List<ValidationIssue> Errors { get; set; } = new();
     public List<ValidationIssue> Warnings { get; set; } = new();
 

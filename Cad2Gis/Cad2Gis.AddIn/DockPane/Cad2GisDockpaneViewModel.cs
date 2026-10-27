@@ -141,6 +141,7 @@ public partial class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contrac
         MunicipalLookups.LoadFromRequiredFieldsExcel(_helperManager.RequiredFieldsExcel);
 
         _adminDetector = new AdminAreaDetector(_helperManager.AdminAreasDir);
+        PipelineStateManager.ContentStampResolver = GdbFeatureClassService.ComputeFeatureClassContentStamp;
 
         // Production output directory setup: prioritize active Project folder
         string? activeProjHome = ArcGIS.Desktop.Core.Project.Current?.HomeFolderPath;
@@ -535,7 +536,7 @@ public partial class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contrac
 
         if (System.Windows.Application.Current?.Dispatcher?.CheckAccess() == false)
         {
-            System.Windows.Application.Current.Dispatcher.Invoke(Update);
+            System.Windows.Application.Current.Dispatcher.BeginInvoke(Update);
         }
         else
         {
@@ -559,7 +560,7 @@ public partial class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contrac
 
         if (System.Windows.Application.Current?.Dispatcher?.CheckAccess() == false)
         {
-            System.Windows.Application.Current.Dispatcher.Invoke(Update);
+            System.Windows.Application.Current.Dispatcher.BeginInvoke(Update);
         }
         else
         {
@@ -583,7 +584,7 @@ public partial class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contrac
 
         if (System.Windows.Application.Current?.Dispatcher?.CheckAccess() == false)
         {
-            System.Windows.Application.Current.Dispatcher.Invoke(Update);
+            System.Windows.Application.Current.Dispatcher.BeginInvoke(Update);
         }
         else
         {
@@ -605,7 +606,7 @@ public partial class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contrac
 
         if (System.Windows.Application.Current?.Dispatcher?.CheckAccess() == false)
         {
-            System.Windows.Application.Current.Dispatcher.Invoke(Update);
+            System.Windows.Application.Current.Dispatcher.BeginInvoke(Update);
         }
         else
         {
@@ -2421,6 +2422,33 @@ public partial class Cad2GisDockpaneViewModel : ArcGIS.Desktop.Framework.Contrac
                             cl.SelectedUsage = string.Empty;
                             StatusMessage = $"تحذير: كود الاستخدام '{storedUsage}' للطبقة '{cl.LayerName}' غير معتمد في ورقة Usage Types وتم مسحه.";
                         }
+                    }
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(p.PlotNoTextLayer))
+            {
+                string? cleanPt = PlotIdExtractorService.CleanLayerName(p.PlotNoTextLayer);
+                if (!string.IsNullOrWhiteSpace(cleanPt))
+                {
+                    var match = CadLayers.FirstOrDefault(l => string.Equals(l.LayerName, cleanPt, StringComparison.OrdinalIgnoreCase));
+                    if (match != null)
+                    {
+                        match.Role = LayerRole.PlotText;
+                        match.Category = "Text & Annotations";
+                    }
+                    SelectedPlotTextLayer = cleanPt;
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(p.UsageTextLayer))
+            {
+                string? cleanUt = PlotIdExtractorService.CleanLayerName(p.UsageTextLayer);
+                if (!string.IsNullOrWhiteSpace(cleanUt))
+                {
+                    var match = CadLayers.FirstOrDefault(l => string.Equals(l.LayerName, cleanUt, StringComparison.OrdinalIgnoreCase));
+                    if (match != null)
+                    {
+                        match.Role = LayerRole.UsageText;
+                        match.Category = "Text & Annotations";
                     }
                 }
             }

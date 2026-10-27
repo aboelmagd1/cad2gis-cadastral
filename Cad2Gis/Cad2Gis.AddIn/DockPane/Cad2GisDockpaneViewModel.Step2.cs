@@ -371,24 +371,7 @@ public partial class Cad2GisDockpaneViewModel
 
             await QueuedTask.Run(() =>
             {
-                // 0. Ingest Data: From Latest Export if selected
-                if (WorkingSourceMode == "LatestExport" && HasLatestExport)
-                {
-                    var state = ExportStateManager.LoadLatestExport(_helperManager.LastExportStateFile);
-                    if (state != null && !string.IsNullOrWhiteSpace(state.ParcelPath) && File.Exists(state.ParcelPath))
-                    {
-                        ReportProgress(35, "الخطوة 2: استيراد أحدث تصدير", $"قراءة البارسلات من أحدث تصدير: '{Path.GetFileName(state.ParcelPath)}'...", phase: "المرحلة 2 من 5");
-                        var (loadedParcels, loadedGeoms, wasCopied, notice) = GdbFeatureClassService.ReadParcelsFromDataset(state.ParcelPath, SelectedUtmZone, _helperManager.ScratchDir);
-                        _parcels.Clear();
-                        _parcels.AddRange(loadedParcels);
-                        _parcelGeometries.Clear();
-                        foreach (var kvp in loadedGeoms)
-                            _parcelGeometries[kvp.Key] = kvp.Value;
-                        return;
-                    }
-                }
-
-                // 1. Ingest Data: From User-Provided file if explicitly loaded
+                // Ingest Data: From User-Provided file if explicitly loaded
                 if (WorkingSourceMode == "UserOwnData" && File.Exists(SourceParcelShpPath))
                 {
                     ReportProgress(35, "الخطوة 2: استيراد البيانات الخاصة", $"قراءة طبقة البارسلات وتجريد Z-Value من '{Path.GetFileName(SourceParcelShpPath)}'...", phase: "المرحلة 2 من 5");
@@ -411,6 +394,10 @@ public partial class Cad2GisDockpaneViewModel
                             if (p.Class != ParcelClass.Main) continue;
                         }
 
+                        p.SourceLayer = "UserOwnData";
+                        p.SourceLayers = "UserOwnData";
+                        p.Provenance = $"From User Own Data [{Path.GetFileName(SourceParcelShpPath)}]";
+
                         _parcels.Add(p);
                         if (loaded.Geometries.TryGetValue(p.InternalId, out var g))
                         {
@@ -423,6 +410,12 @@ public partial class Cad2GisDockpaneViewModel
                             }
                             _parcelGeometries[p.InternalId] = g;
                         }
+                    }
+
+                    if (!GdbFeatureClassService.DatasetExists(GdbPath, "Cad_Dataset"))
+                    {
+                        System.Diagnostics.Debug.WriteLine("[Step2] User Own Data loaded directly: No CAD text join performed");
+                        StatusMessage = "تم تحميل بيانات المستخدم الخاصة مباشرة دون إجراء مطابقة نصوص الكاد (لا يوجد داتاسيت كاد).";
                     }
                 }
                 else if (GdbFeatureClassService.DatasetExists(GdbPath, "Cad_Dataset"))
@@ -479,6 +472,8 @@ public partial class Cad2GisDockpaneViewModel
                                 PlotId = initialPlotId,
                                 Class = isMain ? ParcelClass.Main : ParcelClass.Sub,
                                 AreaSqm = metrics.areaSqm,
+                                SourceLayer = item.LayerName,
+                                SourceLayers = $"{item.LayerName}:{metrics.lengthM:F1}",
                                 LayerUsage = layerUsageCode,
                                 Usage = layerUsageCode,
                                 UsageText = lyrInfo?.DecodedArabicText ?? "",
@@ -520,6 +515,8 @@ public partial class Cad2GisDockpaneViewModel
                                 PlotId = $"P{newId}",
                                 Class = cpAttr.AssignedClass,
                                 AreaSqm = metrics.areaSqm,
+                                SourceLayer = cpAttr.DominantLayer ?? "",
+                                SourceLayers = cpAttr.ContributingLayersFormatted ?? "",
                                 LayerUsage = cpAttr.AssignedUsage,
                                 Usage = cpAttr.AssignedUsage,
                                 UsageText = !string.IsNullOrWhiteSpace(cpAttr.UsageText) ? cpAttr.UsageText : (cpAttr.AssignedUsage ?? ""),
@@ -561,6 +558,8 @@ public partial class Cad2GisDockpaneViewModel
                                 PlotId = $"P{newId}",
                                 Class = cpClass,
                                 AreaSqm = metrics.areaSqm,
+                                SourceLayer = cpGrp ?? "",
+                                SourceLayers = cpGrp ?? "",
                                 Usage = cpClass == ParcelClass.Main ? "قطعة رئيسية" : "خدمات / فرعية",
                                 Remarks = string.Empty,
                                 Provenance = $"From FeatureToPolygon [{cpGrp}]"
@@ -619,6 +618,8 @@ public partial class Cad2GisDockpaneViewModel
                                 PlotId = $"P{newId}",
                                 Class = isMain ? ParcelClass.Main : ParcelClass.Sub,
                                 AreaSqm = metrics.areaSqm > 0 ? metrics.areaSqm : ring.Area,
+                                SourceLayer = ring.SourceLayer ?? "",
+                                SourceLayers = ring.LayerNames.Count > 0 ? string.Join(";", ring.LayerNames.Distinct()) : (ring.SourceLayer ?? ""),
                                 Remarks = string.Empty,
                                 Provenance = ring.WasUsedAsIs 
                                     ? $"From Closed Polyline [{ring.SourceLayer}]" 
@@ -634,11 +635,71 @@ public partial class Cad2GisDockpaneViewModel
                         PolygonizationStaleReason = string.Empty;
                     }
 
-                    // C. Spatially Match Annotations to Parcels (PlotId and Usage) via High-Speed 2D Spatial Grid Index
-                    if (datasetFeatures.Annotations.Count > 0 && _parcels.Count > 0)
+                    // C. Spatially Match Annotations to Parcels (PlotId and Usage) with Spatial Reference Safety & Reporting
+                    if (_parcels.Count > 0)
                     {
-                        // 1. Build a 2D spatial grid index for parcels based on bounding envelope (Extent)
-                        double gridCellSize = 100.0; // 100m cells in UTM
+                        // 1. Resolve active PlotText and UsageText layers
+                        var activePlotLayers = new HashSet<string>(
+                            CadLayers.Where(l => l.Role == LayerRole.PlotText).Select(l => l.LayerName.Trim()),
+                            StringComparer.OrdinalIgnoreCase);
+                        string? explicitPlotLayer = PlotIdExtractorService.CleanLayerName(SelectedPlotTextLayer);
+                        if (!string.IsNullOrEmpty(explicitPlotLayer))
+                        {
+                            activePlotLayers.Add(explicitPlotLayer);
+                        }
+
+                        var activeUsageLayers = new HashSet<string>(
+                            CadLayers.Where(l => l.Role == LayerRole.UsageText).Select(l => l.LayerName.Trim()),
+                            StringComparer.OrdinalIgnoreCase);
+
+                        System.Diagnostics.Debug.WriteLine($"[Step2] Resolved PlotText layers: [{string.Join(", ", activePlotLayers)}], UsageText layers: [{string.Join(", ", activeUsageLayers)}]");
+
+                        bool hasSelectedTextLayers = activePlotLayers.Count > 0 || activeUsageLayers.Count > 0;
+                        int readAnnotationsForSelected = datasetFeatures.Annotations.Count(a => activePlotLayers.Contains(a.LayerName) || activeUsageLayers.Contains(a.LayerName));
+
+                        // Rule: A PlotText (or UsageText) layer is selected but 0 annotations were read -> stop with an error
+                        if (hasSelectedTextLayers && (datasetFeatures.Annotations.Count == 0 || readAnnotationsForSelected == 0))
+                        {
+                            var fcList = datasetFeatures.DiscoveredFeatureClasses.Count > 0 ? string.Join(", ", datasetFeatures.DiscoveredFeatureClasses) : "None";
+                            var tfList = string.Join("; ", datasetFeatures.FeatureClassTextFields.Select(kv => $"{kv.Key}: [{string.Join(", ", kv.Value)}]"));
+                            string err = $"خطأ: تم تحديد طبقات نصوص (PlotText: [{string.Join(", ", activePlotLayers)}], UsageText: [{string.Join(", ", activeUsageLayers)}]) ولكن لم يتم قراءة أي نصوص لهذه الطبقات من Cad_Dataset!\n" +
+                                         $"الطبقات الموجودة في الداتاسيت: {fcList}\n" +
+                                         $"حقول النصوص المكتشفة: {tfList}";
+                            if (datasetFeatures.ReadException != null)
+                            {
+                                err += $"\nاستثناء القراءة: {datasetFeatures.ReadException.Message}";
+                            }
+                            StatusMessage = err;
+                            throw new InvalidOperationException(err);
+                        }
+
+                        // 2. Spatial reference safety: Project annotations to activeSr if needed
+                        var projectedAnnotations = new List<(string Text, MapPoint Location, string LayerName)>();
+                        foreach (var annot in datasetFeatures.Annotations)
+                        {
+                            if (annot.Location == null || string.IsNullOrWhiteSpace(annot.Text)) continue;
+                            var loc = annot.Location;
+                            if (loc.SpatialReference != null && activeSr != null && !loc.SpatialReference.IsEqual(activeSr))
+                            {
+                                try
+                                {
+                                    var pLoc = GeometryEngine.Instance.Project(loc, activeSr) as MapPoint;
+                                    if (pLoc != null)
+                                    {
+                                        System.Diagnostics.Debug.WriteLine($"[Step2] Projected annotation '{annot.Text}' on layer '{annot.LayerName}' from WKID {loc.SpatialReference.Wkid} to {activeSr.Wkid}");
+                                        loc = pLoc;
+                                    }
+                                }
+                                catch (Exception pEx)
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"[Step2] Projection error for annotation '{annot.Text}': {pEx.Message}");
+                                }
+                            }
+                            projectedAnnotations.Add((annot.Text, loc, annot.LayerName));
+                        }
+
+                        // 3. Build a 2D spatial grid index for parcels based on bounding envelope
+                        double gridCellSize = 50.0;
                         var parcelGrid = new Dictionary<(long gx, long gy), List<(ParcelRecord parcel, Polygon geom, Envelope extent)>>();
 
                         foreach (var p in _parcels)
@@ -664,12 +725,12 @@ public partial class Cad2GisDockpaneViewModel
                             }
                         }
 
-                        // 2. Query annotations against candidate parcels in matching grid cell
+                        // 4. Query annotations against candidate parcels in matching grid cell
                         var parcelAnnotationsMap = new Dictionary<long, List<(string Text, string LayerName)>>();
+                        int totalInsideMatched = 0;
 
-                        foreach (var annot in datasetFeatures.Annotations)
+                        foreach (var annot in projectedAnnotations)
                         {
-                            if (annot.Location == null) continue;
                             long gx = (long)Math.Floor(annot.Location.X / gridCellSize);
                             long gy = (long)Math.Floor(annot.Location.Y / gridCellSize);
 
@@ -681,7 +742,6 @@ public partial class Cad2GisDockpaneViewModel
                                     var item = candidates[ci];
                                     if (!testedParcels.Add(item.parcel.InternalId)) continue;
 
-                                    // Fast bounding box rejection
                                     var ext = item.extent;
                                     if (annot.Location.X < ext.XMin || annot.Location.X > ext.XMax ||
                                         annot.Location.Y < ext.YMin || annot.Location.Y > ext.YMax)
@@ -689,7 +749,6 @@ public partial class Cad2GisDockpaneViewModel
                                         continue;
                                     }
 
-                                    // Accurate contains test only if point is within bounding box
                                     if (GeometryEngine.Instance.Contains(item.geom, annot.Location) ||
                                         GeometryEngine.Instance.Intersects(item.geom, annot.Location))
                                     {
@@ -699,32 +758,36 @@ public partial class Cad2GisDockpaneViewModel
                                             parcelAnnotationsMap[item.parcel.InternalId] = aList;
                                         }
                                         aList.Add((annot.Text, annot.LayerName));
-                                        break; // Point belongs to at most one parcel
+                                        totalInsideMatched++;
+                                        break;
                                     }
                                 }
                             }
                         }
 
-                        // Resolve target PlotText and Usage layers based on user selection
-                        string? explicitPlotLayer = PlotIdExtractorService.CleanLayerName(SelectedPlotTextLayer);
-
-                        var secondaryPlotLayers = new HashSet<string>(
-                            CadLayers.Where(l => l.Role == LayerRole.PlotText).Select(l => l.LayerName.Trim()),
-                            StringComparer.OrdinalIgnoreCase);
-
-                        if (string.IsNullOrEmpty(explicitPlotLayer) && secondaryPlotLayers.Count == 0)
+                        // Rule: Annotations were read but none matched any polygon -> warning with diagnostics
+                        if (projectedAnnotations.Count > 0 && totalInsideMatched == 0 && _parcels.Count > 0)
                         {
-                            foreach (var cl in CadLayers.Where(l => l.Category == "Text & Annotations" || CadExtractionService.InferRoleFromName(l.LayerName) == LayerRole.PlotText))
-                            {
-                                secondaryPlotLayers.Add(cl.LayerName.Trim());
-                            }
+                            double aMinX = projectedAnnotations.Min(a => a.Location.X);
+                            double aMaxX = projectedAnnotations.Max(a => a.Location.X);
+                            double aMinY = projectedAnnotations.Min(a => a.Location.Y);
+                            double aMaxY = projectedAnnotations.Max(a => a.Location.Y);
+
+                            double pMinX = _parcelGeometries.Values.Min(g => g.Extent.XMin);
+                            double pMaxX = _parcelGeometries.Values.Max(g => g.Extent.XMax);
+                            double pMinY = _parcelGeometries.Values.Min(g => g.Extent.YMin);
+                            double pMaxY = _parcelGeometries.Values.Max(g => g.Extent.YMax);
+
+                            string warn = $"تحذير: تمت قراءة {projectedAnnotations.Count} نص كاد ولكن لم يقع أي نص داخل أي مضلع من مضلعات البارسلات ({_parcels.Count} مضلع)!\n" +
+                                          $"المرجع المكاني للنصوص: {datasetFeatures.AnnotationsSpatialReferenceWkid ?? "غير معروف"} ({datasetFeatures.AnnotationsSpatialReferenceName ?? ""})\n" +
+                                          $"المرجع المكاني للبارسلات: {activeSr?.Wkid} ({activeSr?.Name})\n" +
+                                          $"نطاق النصوص: [{aMinX:F1}, {aMinY:F1}] إلى [{aMaxX:F1}, {aMaxY:F1}]\n" +
+                                          $"نطاق البارسلات: [{pMinX:F1}, {pMinY:F1}] إلى [{pMaxX:F1}, {pMaxY:F1}]";
+                            System.Diagnostics.Debug.WriteLine($"[Step2 Warning] {warn}");
+                            StatusMessage = warn;
                         }
 
-                        var targetUsageLayers = new HashSet<string>(
-                            CadLayers.Where(l => l.Role == LayerRole.UsageText).Select(l => l.LayerName.Trim()),
-                            StringComparer.OrdinalIgnoreCase);
-
-                        // Build parcel centers dictionary
+                        // 5. Build parcel centers dictionary
                         var parcelCenters = new Dictionary<long, (double CenterX, double CenterY)>();
                         foreach (var p in _parcels)
                         {
@@ -732,25 +795,26 @@ public partial class Cad2GisDockpaneViewModel
                             {
                                 var center = polyGeom.Extent.Center;
                                 parcelCenters[p.InternalId] = (center.X, center.Y);
+                                p.CentroidX = center.X;
+                                p.CentroidY = center.Y;
                             }
                         }
 
-                        // Flatten all annotations
-                        var allAnnotsFlattened = datasetFeatures.Annotations
-                            .Where(a => a.Location != null && !string.IsNullOrWhiteSpace(a.Text))
+                        // 6. Flatten all annotations
+                        var allAnnotsFlattened = projectedAnnotations
                             .Select(a => (a.Text, a.Location.X, a.Location.Y, a.LayerName))
                             .ToList();
 
-                        // Execute robust PlotIdExtractorService (Priority 1: Direct Intersect, Fallback: Proximity <= 1.0m to boundary)
-                        var matchReport = PlotIdExtractorService.AssignPlotIds(
+                        // 7. Perform robust text join adhering to cadastral precedence, conflict handling, and report generation
+                        var joinReport = PlotIdExtractorService.PerformTextJoin(
                             _parcels,
                             parcelAnnotationsMap,
                             allAnnotsFlattened,
                             parcelCenters,
                             explicitPlotLayer,
-                            secondaryPlotLayers,
-                            targetUsageLayers,
-                            maxProximityMeters: 1.0,
+                            activePlotLayers,
+                            activeUsageLayers,
+                            enableProximityFallback: false,
                             distanceToParcelFunc: (parcelId, x, y) =>
                             {
                                 if (_parcelGeometries.TryGetValue(parcelId, out var polyGeom) && polyGeom != null)
@@ -758,65 +822,24 @@ public partial class Cad2GisDockpaneViewModel
                                     var pt = MapPointBuilderEx.CreateMapPoint(x, y, polyGeom.SpatialReference);
                                     return GeometryEngine.Instance.Distance(polyGeom, pt);
                                 }
-                                if (parcelCenters.TryGetValue(parcelId, out var c))
-                                {
-                                    return Math.Sqrt(Math.Pow(x - c.CenterX, 2) + Math.Pow(y - c.CenterY, 2));
-                                }
                                 return double.MaxValue;
                             });
 
-                        System.Diagnostics.Debug.WriteLine($"[Audit Log] {matchReport.GetSummary()}");
-
-                        // Assign UsageText / Remarks from annotations map (Spatial Join)
-                        foreach (var p in _parcels)
+                        // 8. Save Text Join Report to logs and reports directory
+                        try
                         {
-                            p.PlotNo1 = p.PlotId;
-
-                            if (parcelAnnotationsMap.TryGetValue(p.InternalId, out var insideAnnots) && insideAnnots.Count > 0)
+                            string repText = joinReport.GenerateFormattedReport();
+                            string logFile = Path.Combine(_helperManager.LogsDir, "text_join_report.txt");
+                            File.WriteAllText(logFile, repText);
+                            string reportsDir = Path.Combine(OutputDirectory, "Reports");
+                            if (Directory.Exists(reportsDir))
                             {
-                                // Gather all annotations from the user's chosen UsageText layer(s)
-                                var usageTextsInside = insideAnnots
-                                    .Where(a => targetUsageLayers.Contains(a.LayerName))
-                                    .Select(a => a.Text.Trim())
-                                    .Where(t => !string.IsNullOrWhiteSpace(t) && !PlotIdExtractorService.IsPlotNumberText(t))
-                                    .Distinct()
-                                    .ToList();
-
-                                if (usageTextsInside.Count == 0 && targetUsageLayers.Count == 0)
-                                {
-                                    usageTextsInside = insideAnnots
-                                        .Where(a => CadExtractionService.InferRoleFromName(a.LayerName) == LayerRole.UsageText || PlotIdExtractorService.IsUsageText(a.Text))
-                                        .Select(a => a.Text.Trim())
-                                        .Where(t => !string.IsNullOrWhiteSpace(t) && !PlotIdExtractorService.IsPlotNumberText(t))
-                                        .Distinct()
-                                        .ToList();
-                                }
-
-                                if (usageTextsInside.Count > 0)
-                                {
-                                    string combinedUsageText = string.Join(" - ", usageTextsInside);
-                                    p.UsageText = combinedUsageText;
-                                    p.Remarks = combinedUsageText; // REMARKS takes data from the layer(s) chosen as UsageText via spatial join!
-                                }
-                            }
-
-                            // Proximity fallback for REMARKS if no annotation fell strictly inside
-                            if (string.IsNullOrWhiteSpace(p.Remarks) && targetUsageLayers.Count > 0 && parcelCenters.TryGetValue(p.InternalId, out var center))
-                            {
-                                var nearestUsage = allAnnotsFlattened
-                                    .Where(a => targetUsageLayers.Contains(a.LayerName) && !PlotIdExtractorService.IsPlotNumberText(a.Text))
-                                    .Select(a => new { a.Text, Distance = Math.Sqrt(Math.Pow(a.X - center.CenterX, 2) + Math.Pow(a.Y - center.CenterY, 2)) })
-                                    .Where(x => x.Distance <= 15.0)
-                                    .OrderBy(x => x.Distance)
-                                    .FirstOrDefault();
-
-                                if (nearestUsage != null && !string.IsNullOrWhiteSpace(nearestUsage.Text))
-                                {
-                                    p.UsageText = nearestUsage.Text.Trim();
-                                    p.Remarks = nearestUsage.Text.Trim();
-                                }
+                                File.WriteAllText(Path.Combine(reportsDir, "text_join_report.txt"), repText);
                             }
                         }
+                        catch { }
+
+                        System.Diagnostics.Debug.WriteLine($"[Step2 TextJoinReport]\n{joinReport.GenerateFormattedReport()}");
                     }
 
                     if (_parcels.Count == 0)
@@ -998,6 +1021,8 @@ public partial class Cad2GisDockpaneViewModel
                                 PlotId = $"P{newId}",
                                 Class = isMain ? ParcelClass.Main : ParcelClass.Sub,
                                 AreaSqm = metrics.areaSqm > 0 ? metrics.areaSqm : ring.Area,
+                                SourceLayer = ring.SourceLayer ?? "",
+                                SourceLayers = ring.LayerNames.Count > 0 ? string.Join(";", ring.LayerNames.Distinct()) : (ring.SourceLayer ?? ""),
                                 Remarks = string.Empty,
                                 Provenance = ring.WasUsedAsIs 
                                     ? $"From Closed Polyline [{ring.SourceLayer}]" 
@@ -1045,7 +1070,7 @@ public partial class Cad2GisDockpaneViewModel
 
                 string fcParcelName = IsDemoProject ? "DEMO_Cad_Constructed_Parcels" : "Cad_Constructed_Parcels";
                 string templateParcel = Path.Combine(_helperManager.TemplatesDir, "PARCEL.shp");
-                await GdbFeatureClassService.EnsureFeatureClassFromTemplateAsync(GdbPath, fcParcelName, templateParcel, SelectedUtmZone);
+                await GdbFeatureClassService.EnsureFeatureClassFromTemplateAsync(GdbPath, fcParcelName, templateParcel, SelectedUtmZone, includeWorkingFields: true);
                 await QueuedTask.Run(() =>
                 {
                     GdbFeatureClassService.WriteParcelsToFeatureClass(GdbPath, fcParcelName, _parcels, _parcelGeometries);

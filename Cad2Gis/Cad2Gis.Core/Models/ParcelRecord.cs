@@ -97,6 +97,36 @@ public class ParcelRecord
     /// </summary>
     public string Provenance { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Dominant CAD layer that created the parcel (working field SRC_LAYER).
+    /// </summary>
+    public string SourceLayer { get; set; } = string.Empty;
+
+    /// <summary>
+    /// All contributing layers with boundary meters, e.g. "A:120.5;B:3.2" (working field SRC_LAYERS).
+    /// </summary>
+    public string SourceLayers { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Raw matched plot text (working field PLOT_TXT).
+    /// </summary>
+    public string PlotText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Layer from which raw matched plot text originated (working field PLOT_LYR).
+    /// </summary>
+    public string PlotLayer { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Layer from which raw matched usage text originated (working field USAGE_LYR).
+    /// </summary>
+    public string UsageLayer { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Spatial match mode ("Contains", "Nearest", "Conflict", "None") (working field MATCH_MODE).
+    /// </summary>
+    public string MatchMode { get; set; } = "None";
+
     public override string ToString() => $"Parcel {PlotId} [{TemporaryParcelClass}] (Plan: {PlanNo}, Usage: {Usage}, Area: {AreaSqm:F2} m²)";
 }
 

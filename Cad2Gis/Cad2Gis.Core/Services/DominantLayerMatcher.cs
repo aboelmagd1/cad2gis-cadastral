@@ -42,6 +42,7 @@ public class LayerAttributionResult
     public string AssignedUsage { get; set; } = string.Empty;
     public string UsageText { get; set; } = string.Empty;
     public Dictionary<string, double> LengthPerLayer { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public string ContributingLayersFormatted => string.Join(";", LengthPerLayer.Select(kv => $"{kv.Key}:{kv.Value:F1}"));
 
     public string GetSummary()
     {

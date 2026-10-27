@@ -39,36 +39,51 @@ public partial class Cad2GisDockpaneViewModel
         if (!isPartOfPipeline) IsBusy = true;
         ReportProgress(10, "الخطوة 3: تعبئة الاسكيما والبيانات البلدية", "التحقق من مصدر البيانات وتطبيق نموذج MOMRAH (26 حقلاً)...", phase: "المرحلة 3 من 5");
 
+        string traceLogPath = Path.Combine(_helperManager.LogsDir, "step3_trace.log");
+        var tracer = new Step3Tracer(traceLogPath);
+        tracer.LogInfo($"=== Starting Step 3 Execution (Pipeline={isPartOfPipeline}) ===");
+
         try
         {
             // 1. Resolve & Validate Step 3 Input from disk
             string step3Input;
-            if (GetSource(3) == StepSource.OwnData)
+            using (tracer.BeginPhase("validate input"))
             {
-                step3Input = ResolveOwnDataOrFail(3);
-                await ValidateInputOrFailAsync(step3Input, GeometryType.Polygon);
-            }
-            else
-            {
-                step3Input = PipelineStateManager.GetVerifiedOutputOrFail(_helperManager.PipelineStateFile, step: 2).Path;
-                await ValidateInputOrFailAsync(step3Input, GeometryType.Polygon);
+                if (GetSource(3) == StepSource.OwnData)
+                {
+                    step3Input = ResolveOwnDataOrFail(3);
+                    await ValidateInputOrFailAsync(step3Input, GeometryType.Polygon);
+                }
+                else
+                {
+                    step3Input = PipelineStateManager.GetVerifiedOutputOrFail(_helperManager.PipelineStateFile, step: 2).Path;
+                    await ValidateInputOrFailAsync(step3Input, GeometryType.Polygon);
+                }
+                tracer.LogInfo($"Resolved Step 3 Input: {step3Input}");
             }
 
             System.Diagnostics.Debug.WriteLine($"[Step3] option={GetSource(3)} source={step3Input}");
 
             // 2. Read parcels from disk (always load current data from disk)
-            await QueuedTask.Run(() =>
+            bool hasPlotTxtField = false;
+            using (tracer.BeginPhase("read parcels"))
             {
-                var (loadedParcels, loadedGeoms, _, _) = GdbFeatureClassService.ReadParcelsFromDataset(step3Input, SelectedUtmZone, _helperManager.ScratchDir);
-                if (loadedParcels.Count > 0)
+                await QueuedTask.Run(() =>
                 {
-                    _parcels.Clear();
-                    _parcels.AddRange(loadedParcels);
-                    _parcelGeometries.Clear();
-                    foreach (var kvp in loadedGeoms)
-                        _parcelGeometries[kvp.Key] = kvp.Value;
-                }
-            });
+                    hasPlotTxtField = GdbFeatureClassService.HasField(step3Input, "PLOT_TXT");
+                    var (loadedParcels, loadedGeoms, _, _) = GdbFeatureClassService.ReadParcelsFromDataset(step3Input, SelectedUtmZone, _helperManager.ScratchDir);
+                    if (loadedParcels.Count > 0)
+                    {
+                        _parcels.Clear();
+                        _parcels.AddRange(loadedParcels);
+                        _parcelGeometries.Clear();
+                        foreach (var kvp in loadedGeoms)
+                            _parcelGeometries[kvp.Key] = kvp.Value;
+                    }
+                });
+
+                tracer.LogInfo($"Loaded {_parcels.Count} parcels from disk");
+            }
 
             if (_parcels.Count == 0)
             {
@@ -76,10 +91,40 @@ public partial class Cad2GisDockpaneViewModel
                 throw new InvalidOperationException("No parcels loaded to populate schema.");
             }
 
-            await QueuedTask.Run(() =>
+            // 2.1 PLOT_ID from PLOT_TXT (Line with data layer mode only)
+            if (LayerGeometryModeService.IsLineWithDataLayer(SelectedGeometryMode))
             {
+                if (!hasPlotTxtField)
+                {
+                    string missingLog = $"PLOT_TXT field not found in {step3Input}; PLOT_ID left unchanged";
+                    tracer.LogInfo(missingLog);
+                    System.Diagnostics.Debug.WriteLine($"[Step3] {missingLog}");
+                }
+                else
+                {
+                    var r = PlotIdFromPlotTextService.Apply(_parcels);
+                    string logLine = $"[Step3] PLOT_ID from PLOT_TXT: assigned={r.Assigned}, emptyText={r.EmptyText}, changed={r.Changed}, duplicates={r.DuplicateIds.Count}";
+                    if (r.Examples.Count > 0)
+                    {
+                        logLine += $" | Examples: {string.Join(", ", r.Examples)}";
+                    }
+                    tracer.LogInfo(logLine);
+                    System.Diagnostics.Debug.WriteLine(logLine);
 
-                if (IsSchemaFromCustom)
+                    if (r.DuplicateIds.Count > 0)
+                    {
+                        string dupWarning = $"Duplicate PLOT_IDs detected from PLOT_TXT ({r.DuplicateIds.Count} duplicate values): {string.Join(", ", r.DuplicateIds.Take(10))}";
+                        tracer.LogWarning(dupWarning);
+                        System.Diagnostics.Debug.WriteLine($"[Step3] {dupWarning}");
+                    }
+                }
+            }
+
+            // 3. Custom schema or Excel Read & Enrichment
+            if (IsSchemaFromCustom)
+            {
+                List<Dictionary<string, object>> customRecords;
+                using (tracer.BeginPhase("Excel read"))
                 {
                     var map = MapView.Active?.Map;
                     bool isMapLayer = SelectedMapLayer?.Layer != null || (map != null && map.GetLayersAsFlattenedList().OfType<FeatureLayer>().Any(l => string.Equals(l.Name, CustomSchemaDataPath, StringComparison.OrdinalIgnoreCase)));
@@ -91,74 +136,89 @@ public partial class Cad2GisDockpaneViewModel
                     }
 
                     ReportProgress(30, "الخطوة 3: قراءة البيانات الخاصة", $"قراءة السجلات من '{Path.GetFileName(CustomSchemaDataPath)}'...", phase: "المرحلة 3 من 5");
-                    var customRecords = CustomSchemaDataHelper.ReadRecords(CustomSchemaDataPath);
+                    customRecords = CustomSchemaDataHelper.ReadRecords(CustomSchemaDataPath);
                     if (customRecords.Count == 0)
                     {
                         StatusMessage = "الملف المختار لا يحتوي على أي سجلات بيانات.";
                         throw new InvalidOperationException("No records found in custom data file.");
                     }
+                    tracer.LogInfo($"Read {customRecords.Count} custom records");
+                }
 
-                    // Index custom records by the mapped PLOT_ID if mapped
-                    var plotIdMapping = FieldMappings.FirstOrDefault(m => m.TargetField.Equals("PLOT_ID", StringComparison.OrdinalIgnoreCase) && m.IsMapped);
-                    string? sourcePlotIdKey = plotIdMapping?.SelectedSourceField;
-
-                    var recordsByPlotId = new Dictionary<string, Dictionary<string, object>>(StringComparer.OrdinalIgnoreCase);
-                    if (!string.IsNullOrEmpty(sourcePlotIdKey))
+                using (tracer.BeginPhase("enrich"))
+                {
+                    await QueuedTask.Run(() =>
                     {
-                        foreach (var row in customRecords)
+                        var plotIdMapping = FieldMappings.FirstOrDefault(m => m.TargetField.Equals("PLOT_ID", StringComparison.OrdinalIgnoreCase) && m.IsMapped);
+                        string? sourcePlotIdKey = plotIdMapping?.SelectedSourceField;
+
+                        var recordsByPlotId = new Dictionary<string, Dictionary<string, object>>(StringComparer.OrdinalIgnoreCase);
+                        if (!string.IsNullOrEmpty(sourcePlotIdKey))
                         {
-                            if (row.TryGetValue(sourcePlotIdKey, out var pidObj) && pidObj != null)
+                            foreach (var row in customRecords)
                             {
-                                string pidStr = pidObj.ToString()?.Trim() ?? string.Empty;
-                                if (!string.IsNullOrEmpty(pidStr))
+                                if (row.TryGetValue(sourcePlotIdKey, out var pidObj) && pidObj != null)
                                 {
-                                    recordsByPlotId[pidStr] = row;
+                                    string pidStr = pidObj.ToString()?.Trim() ?? string.Empty;
+                                    if (!string.IsNullOrEmpty(pidStr))
+                                    {
+                                        recordsByPlotId[pidStr] = row;
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    // Apply mapped values
-                    int mappedCount = 0;
-                    for (int i = 0; i < _parcels.Count; i++)
-                    {
-                        var p = _parcels[i];
-                        Dictionary<string, object>? matchedRow = null;
-
-                        if (!string.IsNullOrEmpty(p.PlotId) && recordsByPlotId.TryGetValue(p.PlotId, out var r))
+                        int mappedCount = 0;
+                        for (int i = 0; i < _parcels.Count; i++)
                         {
-                            matchedRow = r;
-                        }
-                        else if (recordsByPlotId.Count == 0 && i < customRecords.Count)
-                        {
-                            matchedRow = customRecords[i];
+                            var p = _parcels[i];
+                            Dictionary<string, object>? matchedRow = null;
+
+                            if (!string.IsNullOrEmpty(p.PlotId) && recordsByPlotId.TryGetValue(p.PlotId, out var r))
+                            {
+                                matchedRow = r;
+                            }
+                            else if (recordsByPlotId.Count == 0 && i < customRecords.Count)
+                            {
+                                matchedRow = customRecords[i];
+                            }
+
+                            if (matchedRow != null)
+                            {
+                                mappedCount++;
+                                ApplyCustomRowToParcel(p, matchedRow);
+                            }
+
+                            MissingDataPolicy.ApplyDefaults(p, _projectMeta, forceUpdate: false);
                         }
 
-                        if (matchedRow != null)
-                        {
-                            mappedCount++;
-                            ApplyCustomRowToParcel(p, matchedRow);
-                        }
-
-                        // Apply standard fallback defaults for unmapped fields
-                        MissingDataPolicy.ApplyDefaults(p, _projectMeta, forceUpdate: false);
-                    }
-
-                    ReportProgress(70, "الخطوة 3: مطابقة البيانات", $"تم ربط بيانات {mappedCount} قطعة بالبيانات الخاصة بنجاح.", phase: "المرحلة 3 من 5");
+                        ReportProgress(70, "الخطوة 3: مطابقة البيانات", $"تم ربط بيانات {mappedCount} قطعة بالبيانات الخاصة بنجاح.", phase: "المرحلة 3 من 5");
+                        tracer.LogInfo($"Enriched {mappedCount} parcels with custom schema");
+                    });
                 }
-                else
+            }
+            else
+            {
+                Dictionary<string, LandUseItem>? luMap = null;
+                using (tracer.BeginPhase("Excel read"))
                 {
-                    // 1. Read Land Use Table & join by PLOT_ID
-                    Dictionary<string, LandUseItem>? luMap = null;
                     if (File.Exists(LandUseExcelPath))
                     {
                         ReportProgress(35, "الخطوة 3: مطابقة جدول استخدامات الأراضي", $"قراءة ومطابقة الاستخدامات من '{Path.GetFileName(LandUseExcelPath)}'...", phase: "المرحلة 3 من 5");
                         luMap = LandUseExcelService.ReadLandUseFile(LandUseExcelPath);
+                        tracer.LogInfo($"Read land use map with {luMap?.Count ?? 0} entries");
                     }
+                }
+
+                using (tracer.BeginPhase("enrich"))
+                {
                     var discrepancies = new List<string>();
                     LandUseExcelService.EnrichParcels(_parcels, luMap, discrepancies, MainUsageMode);
+                    tracer.LogInfo($"Land use enrichment completed for {_parcels.Count} parcels");
+                }
 
-                    // 2. Validate Areas Excel if provided
+                using (tracer.BeginPhase("QA validation"))
+                {
                     if (File.Exists(AreasExcelPath))
                     {
                         ReportProgress(55, "Step 3: Validate Areas Excel", $"Comparing area tolerances with '{Path.GetFileName(AreasExcelPath)}'...", phase: "Phase 3 of 5");
@@ -170,103 +230,160 @@ public partial class Cad2GisDockpaneViewModel
                                 PercentTolerance = AreaTolerancePercent
                             };
                             var valResult = QaValidationEngine.ValidateAll(_parcels, Array.Empty<BorderRecord>(), areasExcelPath: AreasExcelPath, areaOptions: areaOptions);
+                            tracer.LogInfo($"QA validation finished: {valResult.TotalIssues} issues found");
                         }
                         catch (Exception ex)
                         {
-                            System.Diagnostics.Debug.WriteLine($"Areas Excel comparison notice: {ex.Message}");
+                            tracer.LogWarning($"Areas Excel comparison notice: {ex.Message}");
                         }
-                    }
-
-                    // 3. Detect admin jurisdiction based on location of MAIN parcels
-                    MapPoint? mainParcelsCenter = null;
-                    var mainParcels = _parcels.Where(p => p.Class == ParcelClass.Main).ToList();
-                    if (mainParcels.Count > 0)
-                    {
-                        double sumX = 0, sumY = 0;
-                        int cnt = 0;
-                        foreach (var mp in mainParcels)
-                        {
-                            if (_parcelGeometries.TryGetValue(mp.InternalId, out var g) && !g.IsEmpty)
-                            {
-                                sumX += g.Extent.Center.X;
-                                sumY += g.Extent.Center.Y;
-                                cnt++;
-                            }
-                        }
-                        if (cnt > 0)
-                        {
-                            mainParcelsCenter = MapPointBuilderEx.CreateMapPoint(sumX / cnt, sumY / cnt);
-                        }
-                    }
-                    else if (_parcelGeometries.Count > 0)
-                    {
-                        var firstGeom = _parcelGeometries.Values.FirstOrDefault(g => !g.IsEmpty);
-                        if (firstGeom != null) mainParcelsCenter = firstGeom.Extent.Center;
-                    }
-
-                    // Detect administrative location (Region & City) from main parcels location
-                    DetectAdminJurisdiction(mainParcelsCenter);
-
-                    // Build structured address combining detected City/Region with user parameters (NeighbourhoodName, etc.)
-                    string structuredAddress = _projectMeta.BuildAddress(_projectMeta.NeighbourhoodName);
-
-                    // Apply MOMRAH Metadata Policy and structured address to all parcels
-                    foreach (var p in _parcels)
-                    {
-                        MissingDataPolicy.ApplyDefaults(p, _projectMeta, forceUpdate: true);
-                        p.Neighbourhood = _projectMeta.NeighbourhoodCode;
-                        p.RegionId = _projectMeta.RegionId;
-                        p.CityId = _projectMeta.CityId;
-                        p.Address = structuredAddress;
                     }
                 }
 
-                ReportProgress(80, "Step 3: Apply Schema & Metadata", $"Applying schema and address to {_parcels.Count} parcels...", phase: "Phase 3 of 5");
-            });
+                using (tracer.BeginPhase("admin jurisdiction"))
+                {
+                    await QueuedTask.Run(() =>
+                    {
+                        MapPoint? mainParcelsCenter = null;
+                        var mainParcels = _parcels.Where(p => p.Class == ParcelClass.Main).ToList();
+                        if (mainParcels.Count > 0)
+                        {
+                            double sumX = 0, sumY = 0;
+                            int cnt = 0;
+                            foreach (var mp in mainParcels)
+                            {
+                                if (_parcelGeometries.TryGetValue(mp.InternalId, out var g) && !g.IsEmpty)
+                                {
+                                    sumX += g.Extent.Center.X;
+                                    sumY += g.Extent.Center.Y;
+                                    cnt++;
+                                }
+                            }
+                            if (cnt > 0)
+                            {
+                                mainParcelsCenter = MapPointBuilderEx.CreateMapPoint(sumX / cnt, sumY / cnt);
+                            }
+                        }
+                        else if (_parcelGeometries.Count > 0)
+                        {
+                            var firstGeom = _parcelGeometries.Values.FirstOrDefault(g => !g.IsEmpty);
+                            if (firstGeom != null) mainParcelsCenter = firstGeom.Extent.Center;
+                        }
 
-            // 4. Manual edit check and Commit to single PARCEL_Approved_Schema
+                        DetectAdminJurisdiction(mainParcelsCenter);
+
+                        string structuredAddress = _projectMeta.BuildAddress(_projectMeta.NeighbourhoodName);
+
+                        foreach (var p in _parcels)
+                        {
+                            MissingDataPolicy.ApplyDefaults(p, _projectMeta, forceUpdate: true);
+                            p.Neighbourhood = _projectMeta.NeighbourhoodCode;
+                            p.RegionId = _projectMeta.RegionId;
+                            p.CityId = _projectMeta.CityId;
+                            p.Address = structuredAddress;
+                        }
+                    });
+
+                    tracer.LogInfo($"Admin jurisdiction detected: Region={_projectMeta.RegionId}, City={_projectMeta.CityId}");
+                    ReportProgress(80, "Step 3: Apply Schema & Metadata", $"Applying schema and address to {_parcels.Count} parcels...", phase: "Phase 3 of 5");
+                }
+            }
+
+            // 4. Edit detection and Commit to single PARCEL_Approved_Schema
             string fcParcelName = IsDemoProject ? "DEMO_PARCEL_Approved_Schema" : "PARCEL_Approved_Schema";
             string verifiedFcPath = Path.Combine(GdbPath, fcParcelName);
 
-            string? editDetails = null;
-            if (await GdbFeatureClassService.FeatureClassExistsAsync(verifiedFcPath) &&
-                PipelineStateManager.IsEditedSinceWritten(_helperManager.PipelineStateFile, 3, out editDetails))
+            using (tracer.BeginPhase("edit detection"))
             {
-                var promptResult = ArcGIS.Desktop.Framework.Dialogs.MessageBox.Show(
-                    $"تم رصد تعديلات يدوية على طبقة الخطوة 3 ({fcParcelName}): {editDetails}\n\nهل ترغب في استبدال هذه التعديلات وإعادة كتابة الطبقة؟",
-                    "تأكيد استبدال التعديلات اليدوية",
-                    System.Windows.MessageBoxButton.YesNo,
-                    System.Windows.MessageBoxImage.Warning);
-                if (promptResult != System.Windows.MessageBoxResult.Yes)
+                string? editDetails = null;
+                if (await GdbFeatureClassService.FeatureClassExistsAsync(verifiedFcPath) &&
+                    PipelineStateManager.IsEditedSinceWritten(_helperManager.PipelineStateFile, 3, out editDetails))
                 {
-                    StatusMessage = "تم إلغاء إعادة تشغيل الخطوة 3 للحفاظ على التعديلات اليدوية.";
-                    return;
+                    tracer.LogWarning($"Manual edits detected on {fcParcelName}: {editDetails}");
+                    var ownerWin = System.Windows.Application.Current?.MainWindow;
+                    var promptResult = ownerWin != null
+                        ? System.Windows.MessageBox.Show(
+                            ownerWin,
+                            $"تم رصد تعديلات يدوية على طبقة الخطوة 3 ({fcParcelName}): {editDetails}\n\nهل ترغب في استبدال هذه التعديلات وإعادة كتابة الطبقة؟",
+                            "تأكيد استبدال التعديلات اليدوية",
+                            System.Windows.MessageBoxButton.YesNo,
+                            System.Windows.MessageBoxImage.Warning)
+                        : ArcGIS.Desktop.Framework.Dialogs.MessageBox.Show(
+                            $"تم رصد تعديلات يدوية على طبقة الخطوة 3 ({fcParcelName}): {editDetails}\n\nهل ترغب في استبدال هذه التعديلات وإعادة كتابة الطبقة؟",
+                            "تأكيد استبدال التعديلات اليدوية",
+                            System.Windows.MessageBoxButton.YesNo,
+                            System.Windows.MessageBoxImage.Warning);
+
+                    if (promptResult != System.Windows.MessageBoxResult.Yes)
+                    {
+                        StatusMessage = "تم إلغاء إعادة تشغيل الخطوة 3 للحفاظ على التعديلات اليدوية.";
+                        tracer.LogInfo("Step 3 cancelled by user to preserve manual edits.");
+                        return;
+                    }
                 }
             }
 
             string templateParcel = Path.Combine(_helperManager.TemplatesDir, "PARCEL.shp");
-            await GdbFeatureClassService.EnsureFeatureClassFromTemplateAsync(GdbPath, fcParcelName, templateParcel, SelectedUtmZone);
-
-            await QueuedTask.Run(() =>
+            using (tracer.BeginPhase("ensure feature class"))
             {
-                GdbFeatureClassService.WriteParcelsToFeatureClass(GdbPath, fcParcelName, _parcels, _parcelGeometries);
-                GdbFeatureClassService.AddOrRefreshMapLayer(MapView.Active?.Map, GdbPath, fcParcelName, fcParcelName);
-            });
-
-            // Register Step 3 authoritative single output reference after verification
-            var (isVerified, verifyReason) = await GdbFeatureClassService.VerifyPolygonFeatureClassAsync(verifiedFcPath, _parcels.Count, SelectedUtmZone);
-            if (!isVerified)
-            {
-                ReportError($"فشل التحقق من صحة مخرجات الخطوة 3: {verifyReason}", "خطأ في التحقق من الخطوة 3");
-                return;
+                // Step 3 output PARCEL_Approved_Schema MUST contain exactly the template fields (includeWorkingFields = false)
+                await GdbFeatureClassService.EnsureFeatureClassFromTemplateAsync(GdbPath, fcParcelName, templateParcel, SelectedUtmZone, includeWorkingFields: false);
             }
 
-            RegisterStepOutput(3, verifiedFcPath, _parcels.Count, SelectedUtmZone);
-            RegisterVerifiedStep3Output(verifiedFcPath, _parcels.Count, SelectedUtmZone);
+            using (tracer.BeginPhase("write"))
+            {
+                await QueuedTask.Run(() =>
+                {
+                    GdbFeatureClassService.WriteParcelsToFeatureClass(GdbPath, fcParcelName, _parcels, _parcelGeometries);
+                });
+                tracer.LogInfo($"Written {_parcels.Count} parcels to {fcParcelName}");
+            }
+
+            using (tracer.BeginPhase("add layer"))
+            {
+                await QueuedTask.Run(() =>
+                {
+                    GdbFeatureClassService.AddOrRefreshMapLayer(MapView.Active?.Map, GdbPath, fcParcelName, fcParcelName);
+                });
+            }
+
+            // Register Step 3 authoritative single output reference after verification
+            using (tracer.BeginPhase("verify"))
+            {
+                var (isVerified, verifyReason) = await GdbFeatureClassService.VerifyPolygonFeatureClassAsync(verifiedFcPath, _parcels.Count, SelectedUtmZone);
+                if (!isVerified)
+                {
+                    ReportError($"فشل التحقق من صحة مخرجات الخطوة 3: {verifyReason}", "خطأ في التحقق من الخطوة 3");
+                    tracer.LogError($"Step 3 polygon verification failed: {verifyReason}");
+                    return;
+                }
+
+                // QA Check: Verify that PARCEL_Approved_Schema contains exactly template fields (no working fields leaked)
+                var (isSchemaExact, extraneousFields) = await GdbFeatureClassService.VerifyExactTemplateSchemaAsync(GdbPath, fcParcelName);
+                if (!isSchemaExact)
+                {
+                    string schemaWarning = $"تنبيه QA: تم اكتشاف حقول إضافية غير موجودة بالقالب في مخرجات الخطوة 3: {string.Join(", ", extraneousFields)}";
+                    tracer.LogWarning(schemaWarning);
+                    System.Diagnostics.Debug.WriteLine($"[Step3 QA Warning] {schemaWarning}");
+                }
+                else
+                {
+                    tracer.LogInfo("QA Check Passed: PARCEL_Approved_Schema conforms exactly to template schema without working fields.");
+                }
+            }
+
+            using (tracer.BeginPhase("register output"))
+            {
+                RegisterStepOutput(3, verifiedFcPath, _parcels.Count, SelectedUtmZone);
+                RegisterVerifiedStep3Output(verifiedFcPath, _parcels.Count, SelectedUtmZone);
+                tracer.LogInfo($"Step 3 Output registered: {verifiedFcPath}");
+            }
+
             ResetProgress($"اكتملت الخطوة 3: تم حفظ وتوثيق {_parcels.Count} قطعة بالاسكيما البلدية داخل '{fcParcelName}' بنجاح.", "اكتملت الخطوة 3");
+            tracer.LogInfo("=== Step 3 Completed Successfully ===");
         }
         catch (Exception ex)
         {
+            tracer.LogError($"Step 3 Exception: {ex.Message}\n{ex.StackTrace}");
             ReportError($"Step 3 Error: {ex.Message}", "Step 3 Error");
         }
         finally
